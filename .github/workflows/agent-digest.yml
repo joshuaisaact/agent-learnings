@@ -1,0 +1,105 @@
+name: Agent Engineering Digest
+
+on:
+  schedule:
+    # Twice weekly: Tuesday and Friday at 2:17 PM UTC
+    # (off-minute to avoid fleet stampede)
+    - cron: "17 14 * * 2,5"
+  workflow_dispatch: # Manual trigger for testing
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Fetch from blogs, HN, and GitHub releases
+        run: python scripts/fetch_sources.py > sources_feed.json
+
+      - name: Show fetch summary
+        run: |
+          echo "Total entries: $(jq .total_entries sources_feed.json)"
+          echo "Blog posts: $(jq .by_type.blog sources_feed.json)"
+          echo "Releases: $(jq .by_type.release sources_feed.json)"
+          echo "HN discussions: $(jq .by_type.discussion sources_feed.json)"
+
+      - name: Evaluate with Claude
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            You are maintaining a repository of opinionated notes on building AI agents.
+            A script has fetched recent content from engineering blogs, Hacker News, and
+            GitHub releases into sources_feed.json.
+
+            Your job: evaluate each entry for genuinely new, qualitative, provable learnings
+            that are NOT already covered in this repository.
+
+            ## Process
+
+            1. Read ALL existing markdown files to understand what's already documented:
+               - best-practices.md
+               - patterns.md
+               - long-running-agents.md
+               - skills.md
+               - lessons-from-ralph.md
+               - sources.md
+
+            2. Read sources_feed.json
+
+            3. For blog posts and HN links that look promising, fetch the full URL to read
+               the actual content. The feed only has titles and short summaries — you need
+               the full article to evaluate whether it contains novel learnings.
+
+            4. For each piece of content, ask:
+               - Does this contain a concrete, provable learning about building agents?
+               - Is it genuinely new (not already covered in the repo)?
+               - Is it from someone with credibility (building real systems, not just opinions)?
+               - Does it have enough substance to add (not just a hot take)?
+
+            5. If you find content worth adding:
+               - Identify which file(s) the learnings belong in
+               - Draft the additions in the repo's editorial voice (first-person, opinionated, concise)
+               - Add source attribution where appropriate
+               - Add a source entry in sources.md if significant enough
+               - Make the edits and commit
+
+            6. If nothing is genuinely new, do NOT make any changes. Most runs there won't be
+               anything worth adding. That's expected. Just report "No novel learnings found."
+
+            ## What to ignore
+            - Product announcements and releases without engineering substance
+            - Benchmark scores without methodology details
+            - Hype, predictions, and thought leadership without evidence
+            - Generic advice ("use tests", "write good prompts")
+            - Anything that restates what's already in the repo
+            - GitHub releases that are just version bumps without notable architectural changes
+
+            ## What to look for
+            - Engineering blog posts describing how agents are built in practice
+            - Post-mortems and "what we learned" from teams shipping agent products
+            - New patterns with evidence (not just proposed patterns)
+            - Specific techniques with measurable results
+            - Open source repos that demonstrate novel harness patterns
+
+            ## Editorial standards
+            - Only add things backed by specific experience or evidence
+            - Match the existing voice: direct claims, not hedging
+            - Prefer updating existing sections over creating new ones
+            - Don't add fluff to hit a word count — a single sentence can be worth adding
+          claude_args: "--model claude-sonnet-4-6 --max-turns 20"

@@ -7,5 +7,6 @@ Opinionated notes on building AI agents, based on actually building things and r
 - [Best Practices](best-practices.md) — Current understanding of what works, updated as I learn
 - [Patterns](patterns.md) — Architecture patterns, when to use them, when to avoid
 - [Long-Running Agents](long-running-agents.md) — Multi-session agents that work overnight
+- [Skills](skills.md) — What makes agent skills effective, based on studying production skills across platforms
 - [Lessons from Ralph](lessons-from-ralph.md) — What I learned building 4 versions of an autonomous coding agent
 - [Sources](sources.md) — Key sources with what I took from each

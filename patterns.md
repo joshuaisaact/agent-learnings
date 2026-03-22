@@ -32,6 +32,10 @@ When to use what. Based on Anthropic's whitepaper + my own experience.
 
 **Watch out for:** Shared mutable state. If parallel agents need to write to the same files/database, you'll get conflicts. Only parallelize truly independent work.
 
+**Git-based task locking:** Anthropic's C compiler project ran 16 parallel Claude instances successfully. The key: agents claim tasks by writing files to `current_tasks/`, and git merge conflicts naturally force re-selection. This turns git into a lightweight coordination layer without needing external orchestration. The difference from Ralph's failed parallel attempts: coordination via git conflicts rather than shared mutable state.
+
+**Fork-join-judge with worktrees:** Cook (`github.com/rjcorwin/cook`) implements a different parallelism pattern: run N agents in isolated git worktrees simultaneously, then have a judge agent compare all results and pick the winner (or merge/synthesize). The isolation is real — separate filesystem trees from the same repo, so agents can't interfere with each other. Three resolution strategies: pick (judge selects best branch), merge (judge synthesizes all branches), compare (judge writes analysis, no merge). Operators compose: `cook "task" review v3 pick` means "run a review loop, race 3 parallel branches, judge picks the best." This solves the shared-mutable-state problem by eliminating it — each agent gets its own copy of the codebase.
+
 ## Hierarchical / supervisory
 
 **What:** Supervisor agent delegates to specialist agents, coordinates results.
@@ -57,6 +61,24 @@ When to use what. Based on Anthropic's whitepaper + my own experience.
 **When:** Tasks where iterative refinement demonstrably improves quality: code generation with security requirements, content creation, translation, complex analysis with validation.
 
 **Watch out for:** Token costs (2-4 cycles typical). Don't use when first-attempt quality is already sufficient.
+
+## Bug-taxonomy decomposition for review
+
+For code review agents, decompose by vulnerability class rather than by workflow step or role. Sashiko (Google/Linux Foundation's kernel code review agent) runs 7 sequential analysis passes, each focused on one concern domain: (1) architectural correctness, (2) commit-message alignment, (3) logic errors, (4) memory lifecycle, (5) concurrency, (6) security, (7) hardware-specific. Each pass is optimized for recall — intentionally over-reports. Then a dedicated 8th consolidation stage deduplicates findings across all passes and attempts to logically prove or disprove each one before output.
+
+This works because a single "review this code" prompt suffers from attention dilution — the model tries to check everything and checks nothing thoroughly. Narrowing each pass to one concern domain improves depth. The consolidation stage then manages precision, filtering false positives with logical reasoning rather than confidence thresholds.
+
+Results: 53.6% of bugs detected from 1,000 upstream kernel commits that had already passed human review (i.e., bugs humans missed), with under 20% false positive rate using Gemini 3.1 Pro.
+
+The consolidation stage is a variant of the evaluator-optimizer pattern but applied differently: instead of iterating on quality, multiple analysis passes feed into a single adjudicator whose job is to prove or disprove findings. This is reusable anywhere review has multiple independent failure modes (security audit, compliance checking, test coverage analysis).
+
+Sashiko also loads per-subsystem prompts conditionally — a block layer patch gets block-specific review knowledge, a networking patch gets different context. Only the relevant subsystem's prompt is loaded, keeping context lean. This is progressive disclosure applied to domain expertise.
+
+## Decompose by context boundaries, not problem type
+
+The intuitive way to split work across agents is by role: planner, implementer, tester, reviewer. This is usually wrong. Anthropic found that role-based splits cause agents to spend more tokens coordinating than working — the "telephone game" failure mode where each handoff between sequential agents degrades information fidelity.
+
+Instead, decompose by what shares context. A feature and its tests belong in the same agent because they share the same mental model of the code. Tightly coupled work belongs together regardless of what "type" of work it is. Multi-agent is only consistently justified for: (1) context pollution degrading reasoning, (2) genuinely parallelizable subtasks, or (3) 15-20+ tools causing selection confusion.
 
 ## Decision framework
 

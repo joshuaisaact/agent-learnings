@@ -1,0 +1,142 @@
+{
+  "blogs": [
+    {
+      "name": "Anthropic Engineering",
+      "feed_url": null,
+      "html_url": "https://www.anthropic.com/engineering"
+    },
+    {
+      "name": "OpenAI News",
+      "feed_url": "https://openai.com/news/rss.xml",
+      "html_url": "https://openai.com/news/"
+    },
+    {
+      "name": "OpenAI Developer Blog",
+      "feed_url": "https://developers.openai.com/rss.xml",
+      "html_url": "https://developers.openai.com/blog"
+    },
+    {
+      "name": "Simon Willison",
+      "feed_url": "https://simonwillison.net/atom/everything/",
+      "html_url": "https://simonwillison.net/"
+    },
+    {
+      "name": "Latent Space",
+      "feed_url": "https://www.latent.space/feed",
+      "html_url": "https://www.latent.space/"
+    },
+    {
+      "name": "Hamel Husain",
+      "feed_url": "https://hamel.dev/index.xml",
+      "html_url": "https://hamel.dev/"
+    },
+    {
+      "name": "Eugene Yan",
+      "feed_url": "https://eugeneyan.com/rss/",
+      "html_url": "https://eugeneyan.com/"
+    },
+    {
+      "name": "Sourcegraph Blog",
+      "feed_url": "https://sourcegraph.com/blog/rss.xml",
+      "html_url": "https://sourcegraph.com/blog"
+    },
+    {
+      "name": "GitHub Blog",
+      "feed_url": "https://github.blog/feed/",
+      "html_url": "https://github.blog/"
+    },
+    {
+      "name": "Chip Huyen",
+      "feed_url": "https://huyenchip.com/feed.xml",
+      "html_url": "https://huyenchip.com/"
+    },
+    {
+      "name": "LangChain Blog",
+      "feed_url": "https://blog.langchain.com/rss/",
+      "html_url": "https://blog.langchain.com/"
+    },
+    {
+      "name": "Vercel Blog",
+      "feed_url": "https://vercel.com/atom",
+      "html_url": "https://vercel.com/blog"
+    },
+    {
+      "name": "Martin Fowler",
+      "feed_url": "https://martinfowler.com/feed.atom",
+      "html_url": "https://martinfowler.com/"
+    },
+    {
+      "name": "Pragmatic Engineer",
+      "feed_url": "https://newsletter.pragmaticengineer.com/feed",
+      "html_url": "https://newsletter.pragmaticengineer.com/"
+    },
+    {
+      "name": "Val Town Blog",
+      "feed_url": "https://blog.val.town/rss.xml",
+      "html_url": "https://blog.val.town/"
+    },
+    {
+      "name": "Cursor Blog",
+      "feed_url": "https://www.cursor.com/atom.xml",
+      "html_url": "https://www.cursor.com/blog"
+    }
+  ],
+  "hacker_news": {
+    "search_url": "https://hn.algolia.com/api/v1/search_by_date",
+    "queries": [
+      "agent engineering",
+      "claude code",
+      "codex agent",
+      "coding agent",
+      "AI agent harness",
+      "agentic coding",
+      "AGENTS.md",
+      "coding assistant open source",
+      "AI code review",
+      "MCP server"
+    ],
+    "min_points": 20
+  },
+  "github_repos": [
+    {
+      "repo": "anthropics/claude-code",
+      "watch": "releases"
+    },
+    {
+      "repo": "openai/codex",
+      "watch": "releases"
+    },
+    {
+      "repo": "Aider-AI/aider",
+      "watch": "releases"
+    },
+    {
+      "repo": "obra/superpowers",
+      "watch": "releases"
+    },
+    {
+      "repo": "OpenHands/OpenHands",
+      "watch": "releases"
+    },
+    {
+      "repo": "SWE-agent/SWE-agent",
+      "watch": "releases"
+    },
+    {
+      "repo": "block/goose",
+      "watch": "releases"
+    },
+    {
+      "repo": "cline/cline",
+      "watch": "releases"
+    },
+    {
+      "repo": "langchain-ai/open-swe",
+      "watch": "releases"
+    },
+    {
+      "repo": "openclaw/openclaw",
+      "watch": "releases"
+    }
+  ]
+}
