@@ -361,10 +361,17 @@ def main():
     new_seen = seen_ids | {e["id"] for e in entries}
     save_seen_ids(new_seen)
 
-    # 6. Cap per type to ensure mix in output
-    blogs = [e for e in entries if e["type"] == "blog"][:20]
-    releases = [e for e in entries if e["type"] == "release"][:10]
-    discussions = [e for e in entries if e["type"] == "discussion"][:20]
+    # 6. Cap per source (max 5 each) to ensure diversity, then per type
+    from collections import defaultdict
+    source_counts = defaultdict(int)
+    source_capped = []
+    for e in entries:
+        if source_counts[e["source"]] < 5:
+            source_capped.append(e)
+            source_counts[e["source"]] += 1
+    blogs = [e for e in source_capped if e["type"] == "blog"][:25]
+    releases = [e for e in source_capped if e["type"] == "release"][:10]
+    discussions = [e for e in source_capped if e["type"] == "discussion"][:25]
     capped = blogs + releases + discussions
 
     # 7. Output

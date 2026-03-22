@@ -343,3 +343,23 @@ Practical guide to managing 4-8 concurrent Claude Code sessions using tmux, with
 **What I took:** Spec-driven handoff between planner and worker agents: the Planner produces a full design spec per feature (problem, solutions considered, chosen approach, implementation plan, files to modify, verification steps) and the Worker implements from that spec in a fresh session with zero history. The spec carries more information than a feature list entry and is more structured than a progress file. After 300+ features, archived FDs become searchable decision traces that agents rediscover during exploratory work — design decisions that would normally live in Slack threads are in the repo as versioned artifacts. Inline `%%` annotation pattern for precise spec feedback: instead of conversational back-and-forth, edit the spec file directly and tell the agent "check %% notes."
 
 **Key insight:** Full design specs as handoff artifacts between planner and worker agents are more effective than feature list entries. The spec captures alternatives considered and rationale, not just what to build — and archived specs become an agent-discoverable decision history.
+
+## context-mode + mcp2cli — MCP Context Reduction
+
+[mksg.lu/blog/context-mode](https://mksg.lu/blog/context-mode) | [github.com/knowsuchagency/mcp2cli](https://github.com/knowsuchagency/mcp2cli)
+
+Two projects attacking different sources of MCP context waste. context-mode (570 HN points) sandboxes tool output; mcp2cli (146 points) eliminates tool schema overhead.
+
+**What I took:** Two distinct patterns. First, output sandboxing: context-mode intercepts tool calls via lifecycle hooks, runs them in subprocesses, indexes output into SQLite FTS5 with BM25 ranking, and returns only relevant excerpts to the agent. 315 KB of raw tool output becomes 5.4 KB (98% reduction). No LLM involved — just full-text search. Second, CLI wrapping for schema elimination: mcp2cli converts MCP tool servers into CLI binaries the agent discovers via `--help` flags. 40 tool schemas (55,000 tokens/turn) become bash calls with progressive discovery (~200 tokens per lookup). Scalekit benchmark: 32x fewer tokens via CLI vs native MCP. These are additive — schema elimination reduces fixed per-turn cost, output sandboxing reduces variable per-call cost.
+
+**Key insight:** The two biggest sources of context waste in MCP are tool schemas (always loaded, rarely all needed) and tool outputs (raw dumps that flood context). Both are solvable without LLM involvement — text search for outputs, CLI discovery for schemas.
+
+## Rudel — Claude Code Session Analytics
+
+[github.com/obsessiondb/rudel](https://github.com/obsessiondb/rudel)
+
+Analytics platform that analyzed 1,573 Claude Code sessions across a 6-person team. ClickHouse backend with materialized views computing per-session metrics.
+
+**What I took:** The output/input token ratio is the simplest proxy for "is the agent productive or spinning." Low ratio + high total tokens = the agent is reading a lot but producing nothing. Session archetypes (quick_win, deep_work, struggle, exploration, abandoned) classified by token ratio, duration, and commit presence are more actionable than raw averages. Error cascades in the first 2 minutes predict abandonment — early error clustering is predictive, not just descriptive. Feature adoption rates (skills 4%, plan mode low) are leading indicators of developer proficiency. Cost-per-commit is more meaningful than cost-per-session. Temporal tool activity visualization (swimlane of tool calls over time) reveals clustering patterns that aggregate counts miss.
+
+**Key insight:** 26% of sessions are abandoned, most within 60 seconds. The agent that matters most is the first 2 minutes.

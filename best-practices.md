@@ -177,6 +177,18 @@ Agents have no sense of diminishing returns on time spent. In Anthropic's C comp
 
 Tool output that gets dumped into the agent's context window competes with everything else the agent needs to reason about. In Anthropic's C compiler project, they learned to output errors to files in easily greppable format (`ERROR` on the same line as diagnostics) rather than streaming verbose output into context. The agent reads only what it needs from the file. Same principle as progressive disclosure, applied to tool results.
 
+## MCP tool schemas are a hidden context tax
+
+Every MCP tool's full JSON schema (name, description, parameters with types) gets injected into context on every API call. A server with 40 tools can burn 55,000 tokens of schema before the agent processes a single user message. This is the upfront cost of a large action space, paid on every turn.
+
+Two patterns to eliminate this:
+
+**CLI wrapping for schema-free progressive disclosure.** mcp2cli and Apideck CLI wrap MCP servers as CLI binaries. Instead of 40 tool schemas always in context, the agent gets one tool: bash. It discovers capabilities via `--help` flags on demand — `mcp2cli --list` (~50 tokens) → `mcp2cli some-command --help` (~150 tokens). Scalekit benchmarked this: simplest task cost 1,365 tokens via CLI vs. 44,026 via MCP (32x cheaper). Claude Code's own Tool Search mechanism and deferred tool loading solve the same problem from the harness side. The CLI approach works without any harness support.
+
+**Output sandboxing via FTS5 indexing.** context-mode (`mksglu/claude-context-mode`) intercepts tool execution via lifecycle hooks (PreToolUse/PostToolUse), runs commands in a subprocess, and indexes the output into SQLite FTS5 with BM25 ranking. The agent queries the index and gets back only relevant excerpts — never sees the raw output. A Playwright snapshot that would cost 56 KB in context becomes 299 bytes. Across a full session: 315 KB of raw tool output → 5.4 KB of contextualized output (98% reduction). No LLM involvement in the compression — just full-text search with relevance ranking.
+
+These are additive: schema elimination reduces the per-turn fixed cost, output sandboxing reduces the per-tool-call variable cost.
+
 ## Negative examples in skill descriptions
 
 When describing skills or tools, include explicit "don't call when..." cases. At Glean, removing negative examples from skill descriptions caused a 20% accuracy drop in routing. The model needs to know when NOT to use a tool as much as when to use it. Write routing logic, not marketing copy — describe when to use the skill, when to avoid it, and what output to expect.
@@ -210,3 +222,12 @@ You need to see what the agent is doing and why. This is harder than normal soft
 - Track token usage and cache hit rates
 - Trace multi-step reasoning chains
 - In multi-agent systems: trace inter-agent communication and delegation patterns
+
+Rudel (`github.com/obsessiondb/rudel`) analyzed 1,573 Claude Code sessions across a 6-person team and surfaced metrics that matter more than raw counts:
+
+- **Output/input token ratio** is the simplest proxy for productivity. Low ratio + high total tokens = the agent is reading a lot but producing nothing ("struggle" sessions). Better than raw token count.
+- **Session archetypes** (quick_win, deep_work, struggle, exploration, abandoned) are more actionable than averages. "40% of sessions on project X are struggles" tells you something; "average token count is high" doesn't.
+- **Error cascades in the first 2 minutes predict abandonment.** Early error clustering is predictive, not just descriptive — a hook that detects this could suggest restarting with better context.
+- **Feature adoption rates** (skills, plan mode, subagents) are leading indicators of developer proficiency. Only 4% of sessions used skills despite them being available.
+- **Cost-per-outcome** (cost per commit, productivity score = commits per dollar) is more meaningful than cost-per-session.
+- **Inference time vs. human time decomposition** reveals whether the bottleneck is the AI (slow inference, retries) or the human (long review times).
