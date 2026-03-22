@@ -169,6 +169,22 @@ Instead of waiting for the agent to run a build command to discover errors, wire
 
 This is the tightest possible feedback loop for code changes. Neither Claude Code nor Aider does this natively — they rely on the agent to run linters/tests explicitly. The LSP approach catches type errors, missing imports, and syntax issues within seconds of the edit, before the agent moves on to the next file. The cost is maintaining LSP child processes, but for long-running coding sessions the investment pays for itself in fewer broken-then-fix cycles.
 
+## Detect analysis paralysis
+
+Agents get stuck in read loops — grepping, reading files, searching — without ever acting. GSD's "analysis paralysis guard" is the simplest fix: if the agent makes 5+ consecutive read/search/grep calls without any edit, write, or bash action, force it to stop and either act on what it's learned or explain why it's stuck. This is enforceable as a hook (count tool calls by category, inject a warning when the ratio skews) or as an iron law in the prompt.
+
+The broader pattern: instrument the tool call stream for degenerate sequences. Other examples — the agent editing and reverting the same file repeatedly (fix loop), the agent running the same test more than 3 times (hoping it passes), the agent reading its own previous output (self-referential loop). Each is a detectable pattern that a hook can interrupt.
+
+## Context pressure awareness for autonomous agents
+
+For long-running autonomous agents (multi-hour Codex runs, overnight Ralph loops), the agent itself should know when context is filling up. GSD implements this as a hook that monitors context usage and injects warnings at 35% and 25% remaining into the agent's `additionalContext`. The agent can then checkpoint its progress before compaction wipes working state.
+
+This matters less for interactive sessions (where compaction handles it) and more for unattended agents that need to preserve state across compaction boundaries. The agent can't checkpoint what it doesn't know it's about to lose.
+
+## Planning artifacts are a prompt injection surface
+
+When agents write structured planning files (specs, progress docs, feature lists) that future agent sessions will read as context, those files are effectively user-controlled input flowing into a system prompt. GSD's `prompt-guard` hook scans writes to `.planning/` directories for injection patterns. This is defense-in-depth for any system where agent-written artifacts become future agent instructions — which includes progress files, CLAUDE.md modifications, and spec documents.
+
 ## Agents are time-blind
 
 Agents have no sense of diminishing returns on time spent. In Anthropic's C compiler project, Claude wasted hours running full test suites when a 1% random sample would have caught the same bugs. The fix: implement `--fast` flags that run small random samples, deterministic per-agent but varied across instances. Give agents fast feedback paths and they'll use them — but you have to build them explicitly.

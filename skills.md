@@ -107,6 +107,14 @@ This prevents context pollution (the subagent reasons about the current task, no
 
 The four subagent statuses define clear escalation: DONE (merge and continue), DONE_WITH_CONCERNS (review concerns, decide), NEEDS_CONTEXT (controller provides missing info), BLOCKED (escalate to human). No ambiguity about what happens next.
 
+## Promote recurring patterns from skills into rules
+
+As your skill collection grows, cross-cutting patterns emerge — the same principle appearing in 3+ skills. These should be promoted into rules (always-loaded, project-wide constraints) rather than staying buried in individual skills.
+
+Everything Claude Code's "rules-distill" workflow: scan all installed skills, extract principles that appear in 2+ skills, propose them as rule candidates with explicit justification. An anti-abstraction safeguard prevents over-promotion — a pattern must be genuinely cross-cutting, not just similar-sounding across two niche skills.
+
+This is the skill equivalent of refactoring: when you see the same pattern repeated, extract it. But with an important constraint — only promote what's truly universal. A rule that says "validate inputs at boundaries" helps everywhere. A rule that says "use BM25 for search" is too specific. The test: would this rule improve an agent's behavior in a project that uses none of your current skills?
+
 ## What separates production skills from demos
 
 After studying hundreds of skills across platforms, the dividing line is clear:

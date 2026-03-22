@@ -363,3 +363,23 @@ Analytics platform that analyzed 1,573 Claude Code sessions across a 6-person te
 **What I took:** The output/input token ratio is the simplest proxy for "is the agent productive or spinning." Low ratio + high total tokens = the agent is reading a lot but producing nothing. Session archetypes (quick_win, deep_work, struggle, exploration, abandoned) classified by token ratio, duration, and commit presence are more actionable than raw averages. Error cascades in the first 2 minutes predict abandonment — early error clustering is predictive, not just descriptive. Feature adoption rates (skills 4%, plan mode low) are leading indicators of developer proficiency. Cost-per-commit is more meaningful than cost-per-session. Temporal tool activity visualization (swimlane of tool calls over time) reveals clustering patterns that aggregate counts miss.
 
 **Key insight:** 26% of sessions are abandoned, most within 60 seconds. The agent that matters most is the first 2 minutes.
+
+## GSD (Get Shit Done)
+
+[github.com/gsd-build/get-shit-done](https://github.com/gsd-build/get-shit-done)
+
+Meta-prompting framework that installs as 44 slash commands + 46 workflows + 16 agents into Claude Code (and 5 other runtimes). v1.28, real test coverage, handles real edge cases (Windows EPERM, WSL paths, Docker).
+
+**What I took:** The analysis paralysis guard: "if you make 5+ consecutive Read/Grep/Glob calls without any Edit/Write/Bash action: STOP." Simple, enforceable, catches a real failure mode. Context monitor hook that injects warnings at 35%/25% context remaining into the agent's `additionalContext` — makes autonomous agents self-aware of context pressure before compaction wipes state. Prompt injection defense for planning artifacts — agent-written markdown files that become future system prompts are scanned for injection patterns via a PreToolUse hook. Wave-based parallel execution with file locking (`O_EXCL` atomic creation on STATE.md) for coordination. The "thin orchestrator" pattern: orchestrator loads paths only (~10-15% context), subagents read files with fresh context.
+
+**Key insight:** Instrument the tool call stream for degenerate sequences. Analysis paralysis (5 reads, no writes), fix loops (edit-revert-edit), test hoping (same test 3+ times) — each is a detectable pattern a hook can interrupt.
+
+## Claude-Mem
+
+[github.com/thedotmack/claude-mem](https://github.com/thedotmack/claude-mem)
+
+Persistent memory system for Claude Code using a second Claude instance as an observer. v10.6, AGPL-3.0.
+
+**What I took:** The observer agent pattern: a second Claude instance with all tools disabled watches the primary session's tool I/O via PostToolUse hooks, compresses raw observations into structured records (what was investigated, learned, completed, next steps), and stores them in SQLite with FTS5 search. Future sessions get relevant records injected via SessionStart. Progressive disclosure for memory search: index first (~50 tokens/result), then full details only for relevant IDs (~500+ tokens). Mode profiles with inheritance for internationalization.
+
+**Key insight:** Separating "doing work" from "recording what happened" into two instances is architecturally clean but expensive. For most projects, a progress file is 80% of the benefit at 0% of the cost. The observer pattern makes sense when automated capture has compounding value across hundreds of sessions.

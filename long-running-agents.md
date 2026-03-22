@@ -106,6 +106,12 @@ When compaction itself hits context limits (the conversation is too large even f
 
 The key design principle: compaction is not an afterthought. It's a core loop primitive that fires automatically based on token budgets. If you're building a harness for long-running tasks, design compaction into the agent loop from the start, not as error handling for "context window exceeded."
 
+## Observer agent for automatic memory capture
+
+Claude-Mem (`github.com/thedotmack/claude-mem`) runs a second Claude instance as a "note-taker" — all tools disabled, it can only receive and respond to text. Every tool call from the primary session (file reads, edits, bash commands) is forwarded to the observer via the PostToolUse hook. The observer compresses raw tool I/O into structured records: what was investigated, what was learned, what was completed, what's next. These records go into SQLite with FTS5 search, and are injected back into future sessions via SessionStart.
+
+This separates "doing work" from "recording what happened." The primary agent doesn't spend context on memory management — the observer handles it asynchronously. The tradeoff is real: you're running a second Claude instance processing every tool call, which meaningfully increases API costs. For most projects, a well-maintained progress file achieves 80% of the benefit at zero cost. The observer pattern makes sense for teams running many long sessions on large projects where automated knowledge capture has compounding value and manual progress tracking doesn't scale.
+
 ## Git-backed persistent memory
 
 Letta Code (`github.com/letta-ai/letta-code`) takes the progress file pattern to its logical conclusion: agent memory is a first-class, version-controlled data structure that persists across sessions, not a text file the agent appends to.
