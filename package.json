@@ -1,0 +1,13 @@
+{
+  "name": "agent-learnings",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "fetch-sources": "tsx scripts/fetch-sources.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0"
+  }
+}

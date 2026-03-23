@@ -3,3 +3,9 @@ scripts/.seen_source_ids.json
 
 # Fetched feed data
 sources_feed.json
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
