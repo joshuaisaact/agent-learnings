@@ -97,6 +97,24 @@
     ],
     "min_points": 20
   },
+  "youtube": {
+    "queries": [
+      "AI coding agent",
+      "claude code tutorial",
+      "agentic coding workflow",
+      "AI agent engineering",
+      "MCP server demo"
+    ]
+  },
+  "bluesky": {
+    "queries": [
+      "claude code",
+      "coding agent",
+      "agentic coding",
+      "AI agent engineering",
+      "MCP server"
+    ]
+  },
   "github_repos": [
     {
       "repo": "anthropics/claude-code",
