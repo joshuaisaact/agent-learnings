@@ -209,6 +209,30 @@ A todo/task tool that makes the agent write down its plan and next steps after e
 
 This is the within-session equivalent of the progress file pattern for cross-session work. Progress files anchor the agent at session start; todo tools anchor it at every step.
 
+## Theory of constraints for agent workflows
+
+The highest-leverage work isn't writing features — it's removing bottlenecks that prevent agents from working effectively. Neil Kakkar describes the progression: first remove formatting friction (automated PR creation via a `/git-pr` skill), then waiting friction (sub-second server restarts via SWC), then verification friction (agent-driven previews), then context-switching friction (parallel worktrees with unique port ranges per worktree).
+
+Each solved constraint makes the next one visible. This is textbook theory of constraints applied to agent-assisted development. The implication: before optimizing prompts or adding tools, ask what's actually slowing the agent down. Often it's infrastructure — slow builds, port collisions, manual approval steps — not the agent's reasoning capability.
+
+A specific operational problem worth noting: running multiple agents in parallel worktrees fails when every server instance binds to the same ports. You need a system that assigns unique port ranges per worktree. This is the kind of infrastructure that's invisible until you try to scale past one concurrent agent.
+
+## CLIs are becoming the dominant agent interface
+
+Services are shipping CLIs faster than MCP servers — Stripe, Ramp, ElevenLabs, Resend, Discord, Google Workspace all recently launched CLI tools. CLIs are simpler to wrap, easier for agents to parse, and require less standardization overhead than protocol layers.
+
+This matters for agent builders because CLI wrapping gives you progressive disclosure for free: the agent discovers capabilities via `--help` flags instead of loading full tool schemas upfront. The Cline Kanban pattern takes this further — a web UI for orchestrating multiple CLI coding agents (Claude Code, Codex, Cline) across isolated git worktrees, solving both inference-bound waiting and merge-conflict management.
+
+The broader framing from Latent Space: "harness engineering" — the middleware, memory, tool interfaces, and safety policies around the model — is the real product layer. Model quality is necessary but no longer the whole story.
+
+## Agent speed removes natural bottlenecks
+
+Mario Zechner (creator of the Pi agent framework used by OpenClaw) argues that agents remove the natural constraint of human typing speed, and this is dangerous. When a human writes code, their speed is the bottleneck that limits daily mistakes. Agents remove that constraint — thousands of lines per day — so errors compound at inhuman scale before anyone notices.
+
+The deeper problem: developers lose understanding when they delegate. "You have zero idea what's going on because you delegated all your agency to your agents." Changes that normally warrant weeks of consideration now occur within hours.
+
+Simon Willison's counter: "write by hand" isn't the answer. The new discipline is balancing speed against thoroughness when code generation is no longer the bottleneck. This is a framing problem, not a tooling problem — and it argues for stronger verification infrastructure, not slower agents.
+
 ## Context pressure awareness for autonomous agents
 
 For long-running autonomous agents (multi-hour Codex runs, overnight Ralph loops), the agent itself should know when context is filling up. GSD implements this as a hook that monitors context usage and injects warnings at 35% and 25% remaining into the agent's `additionalContext`. The agent can then checkpoint its progress before compaction wipes working state.
@@ -281,3 +305,50 @@ Rudel (`github.com/obsessiondb/rudel`) analyzed 1,573 Claude Code sessions acros
 - **Feature adoption rates** (skills, plan mode, subagents) are leading indicators of developer proficiency. Only 4% of sessions used skills despite them being available.
 - **Cost-per-outcome** (cost per commit, productivity score = commits per dollar) is more meaningful than cost-per-session.
 - **Inference time vs. human time decomposition** reveals whether the bottleneck is the AI (slow inference, retries) or the human (long review times).
+
+## Eval metrics for deep agents
+
+LangChain's eval framework for Deep Agents measures four efficiency dimensions alongside correctness:
+
+- **Step ratio** — observed steps / ideal steps
+- **Tool call ratio** — observed tool calls / ideal tool calls
+- **Latency ratio** — observed time / baseline time
+- **Solve rate** — expected steps / observed latency (0 if task fails)
+
+All four are measured against an "ideal trajectory" — the minimal correct path for a task. For novel tasks, use the best-performing model as baseline, then refine as capabilities improve. This is more useful than pass/fail because it distinguishes "solved but wastefully" from "solved efficiently" — two agents with the same success rate can have very different step ratios.
+
+Their eval organization is worth copying: tag evals by capability tested (file_operations, retrieval, tool_use, memory) not by source. This lets engineers run focused subsets via CLI flags. They explicitly separate SDK unit tests (hygiene, all models should pass) from model capability evals (scored, differentiate models).
+
+The pipeline for generating evals: dogfooding traces reveal failure patterns → failures become repeatable test cases → test cases get tagged by capability. External benchmarks (Terminal Bench 2.0, BFCL) supplement but don't replace production-derived evals.
+
+## Five pitfalls of LLM evaluation
+
+Hamel Husain identifies five ways teams get agent evaluation wrong, all of which boil down to skipping data science fundamentals:
+
+1. **Generic metrics.** Teams adopt off-the-shelf eval frameworks without understanding their specific failures. Application-specific metrics ("Calendar Scheduling Failure") matter more than ROUGE or BLEU. Explore traces first, then decide what to measure.
+
+2. **Unverified judges.** Using LLMs as judges without validation is common but dangerous. Treat the judge as a classifier: generate human labels on train/dev/test splits, measure trustworthiness, report precision/recall instead of accuracy (which masks rare failure modes).
+
+3. **Bad experimental design.** Synthetic test data generated via prompts is unrepresentative. Ground synthetic examples in real production logs. Replace subjective Likert scales with binary pass/fail on scoped outcomes.
+
+4. **Poor data practices.** Domain experts should label, not contractors. Labeling itself surfaces "criteria drift" — stakeholders discover what they actually want by looking at outputs. Getting product teams in front of raw agent outputs matters more than dashboards.
+
+5. **Over-automation.** LLMs generate boilerplate but can't substitute for human judgment about what to measure. "You don't know what you want until you see the outputs."
+
+## Infrastructure over scale
+
+ATLAS demonstrates that wrapping a frozen 14B model in structured infrastructure can outperform frontier API models on coding benchmarks. On LiveCodeBench v5: 74.6% pass@1 on a consumer RTX 5060 Ti, vs Claude Sonnet at 65.5%. Cost: ~$0.004/task vs ~$0.07 for API calls.
+
+The architecture is a three-phase pipeline: (1) PlanSearch generates diverse solution approaches with BudgetForcing controlling thinking tokens, (2) geometric self-embeddings score and rank candidates, (3) self-verified repair generates its own test cases and iteratively fixes failing solutions — rescuing 85.7% of failures. The repair phase contributes more than candidate selection in ablation studies.
+
+The tradeoff: 20 minutes per task. This is incompatible with interactive use but viable for batch processing, CI pipelines, and science workflows. The broader lesson: when latency is cheap, trading time for verification rigor is a valid strategy — especially when the verifier is strong enough that you can run candidates in parallel and take the first that passes.
+
+## Agent middleware as composable lifecycle hooks
+
+LangChain's Deep Agents implements middleware as six composable hooks around the agent loop: before_agent, before_model, wrap_model_call, wrap_tool_call, after_model, after_agent. Multiple middleware stack without conflict — FilesystemMiddleware, SubagentMiddleware, and SummarizationMiddleware all coexist.
+
+This is the architectural formalization of the "deterministic safety nets" pattern. The key distinction from plugins: middleware is stackable and wraps the full lifecycle, while plugins typically extend a single point. Use cases split into two categories:
+
+**Deterministic policies** that "can't live in a prompt" — PII redaction, content moderation, tool filtering based on request context. These need consistent enforcement across all executions, not probabilistic compliance.
+
+**Context engineering** — token management through summarization, history trimming, verbose output compression. This is middleware doing what prompt engineering can't: reliably managing what's in context based on dynamic conditions rather than static rules.
