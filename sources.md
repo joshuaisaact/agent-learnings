@@ -374,6 +374,100 @@ Meta-prompting framework that installs as 44 slash commands + 46 workflows + 16 
 
 **Key insight:** Instrument the tool call stream for degenerate sequences. Analysis paralysis (5 reads, no writes), fix loops (edit-revert-edit), test hoping (same test 3+ times) — each is a detectable pattern a hook can interrupt.
 
+## 8 Learnings from 1 Year of Agents — PostHog
+
+[posthog.com/blog/ai-agent-learnings](https://posthog.com/blog/ai-agent-learnings)
+
+PostHog's Michael Matloka on building PostHog AI from hackathon prototype to production agent over a year. Went through three graph-based workflow architectures before landing on a single agentic loop.
+
+**What I took:** The todo tool insight: `todo_write` is a "superpower" where "there's nothing this tool actually needs to do." The value is attention anchoring — writing next steps places intent late in the context window, preventing the agent from losing track across long tool chains. This is the within-session equivalent of the progress file pattern. Also: their "switch mode" tool is a variant of tool search for scaling to many tools without context bloat — confirms the progressive disclosure pattern.
+
+The rest confirms existing patterns: agents beat graph workflows (Ralph v1-v3), single loop beats subagents (context boundaries), context is everything (/init for user onboarding), frameworks are harmful (stay low-level), model improvements invalidate architectural decisions, and evals alone aren't enough (Traces Hour for real usage review).
+
+**Key insight:** A no-op tool that makes the agent write down its plan works because of where the output sits in the context window, not because of what it produces. Attention anchoring, not state management.
+
+## What We Wish We Knew About Building AI Agents — PostHog
+
+[newsletter.posthog.com/p/what-we-wish-we-knew-about-building-ai-agents](https://newsletter.posthog.com/p/what-we-wish-we-knew-about-building-ai-agents)
+
+PostHog's retrospective on two years of building AI agents into their product, from an initial "AI product assistant" through three harness iterations to PostHog AI.
+
+**What I took:** Two ideas not well-covered elsewhere. First, MCP-first product strategy: before building a custom agent, consider exposing your product as an MCP server instead. PostHog's MCP server accounts for 34% of AI-created dashboards — comparable to their built-in agent. MCP servers are simpler to build, validate demand, and serve the growing population of developers using agents as their primary interface. Only go custom when users are non-engineers, compliance blocks external agents, or you need full UX control.
+
+Second, convergence of internal and external agent interfaces: PostHog's 3rd harness iteration (Claude Agent SDK + MCP tools + skills) emerged from realizing their agent and their MCP server should share the same architecture. "Our users are increasingly agents" — whether through PostHog AI or their MCP server. One tool surface, two personas. This avoids the trap of maintaining parallel capability sets.
+
+The rest confirms existing patterns: context is your advantage (layered runtime injection, taxonomy tool for progressive disclosure, memory onboarding), start with simpler alternatives before building an agent (LLM call → specialized model → hardcoded workflow → agent), observability from day one, and reliability beats capabilities as the user-facing priority. Their "traces hour" — a team meeting to manually review real LLM traces and discover eval-worthy patterns — is a good specific practice for teams without established eval pipelines.
+
+**Key insight:** Consider MCP as your product's canonical agent interface first. If adoption is strong, your custom agent should consume the same MCP tools — not a parallel set of internal APIs.
+
+## UNDERWRITE: Benchmarking Agents in Insurance Underwriting — Snorkel AI
+
+[arxiv.org/pdf/2602.00456](https://arxiv.org/pdf/2602.00456)
+
+Expert-first benchmark for evaluating AI agents on 300 multi-turn commercial insurance underwriting tasks. 13 frontier models evaluated with MCP-exposed tools, a simulated underwriter user, and proprietary business rules.
+
+**What I took:** Three findings that changed how I think about agent reliability. First, tool error recovery matters more than tool error avoidance — even top models (Claude Sonnet 4.5, GPT-5, Grok-4) had tool errors in 20-40% of conversations, but recovery rate (self-correcting after a failed tool call) had moderate-to-strong correlation with correctness while raw error rate had weak correlation. Build agents that retry well, not agents that never fail.
+
+Second, pretrained knowledge is an active hazard in specialized domains. Models hallucinated domain-specific answers from training data even with full tool access. Accuracy dropped sharply as reference answers diverged from pretrained expectations. Smaller models hit hardest (Claude Haiku: 100% on low-surprise tasks, 66% on high-surprise). The model thinks it knows and doesn't bother checking the tools.
+
+Third, verbose reasoning without tool use is a detectable failure signal. Incorrect traces had fewer steps but higher token counts — agents talked themselves into wrong answers instead of grounding with tools. GPT-5-Nano: 7k tokens, 3 steps, zero tool calls, wrong. Claude Haiku: 400 tokens, 4 steps, 1 tool call, correct.
+
+Also notable: Claude Sonnet 4.5's state transition diagrams showed tool-to-tool-to-ai patterns (multiple tool calls with internal reasoning before responding), while weaker models like Gemini 2.5 Pro did tool-to-user (sending each result directly back, often with bad follow-up questions). Internal reflection before surfacing to the user is a behavioral marker of top performers. And pass@k showed ~20% degradation from pass@1 to pass@4 — models that get it right once don't get it right consistently. Single-run evals overstate real-world reliability.
+
+**Key insight:** The most accurate models aren't the most efficient, and tool errors are universal. What separates top agents is self-correction after tool failures and knowing when to check tools vs. trusting pretrained knowledge.
+
+## Multi-Agent Teams Hold Experts Back — Stanford
+
+[arxiv.org/abs/2602.01011](https://arxiv.org/abs/2602.01011)
+
+Stanford study testing LLM agent teams across MMLU Pro, GPQA, HLE, MATH-500, SimpleQA, and organizational psychology tasks. Models tested include Claude Opus 4/4.5, GPT-5, o3-mini, o4-mini, and others.
+
+**What I took:** The strongest empirical evidence that multi-agent teams systematically fail to leverage expertise. Teams achieve "weak synergy" (beating the average member) but never "strong synergy" (matching the expert). The mechanism is "integrative compromise" — non-expert agents average expert and non-expert views instead of deferring to the expert. Even when teams are explicitly told which agent is the expert, performance barely improves. Synergy gaps range from 8.1% (MMLU Pro) to 98.7% (psychology tasks). Larger teams make it worse: statistically significant degradation from 2 to 8 agents.
+
+The root cause is RLHF alignment training, which optimizes for agreeableness over epistemic deference. One important wrinkle: integrative compromise *protects* against adversarial agents. When a saboteur was injected into a team, multi-agent consensus filtered the bad input effectively. The failure mode for expertise is a feature for adversarial robustness — a genuine tradeoff.
+
+**Key insight:** Current multi-agent teams require explicit role specification and workflow design. Self-organizing deliberation doesn't work because RLHF-trained models compromise when they should defer.
+
+## CooperBench: Why Coding Agents Cannot Be Your Teammates Yet — Stanford / SAP
+
+[arxiv.org/abs/2601.13295](https://arxiv.org/abs/2601.13295)
+
+652 collaborative coding tasks across 12 repos (Python, TypeScript, Go, Rust). Tested GPT-5, Claude Sonnet 4.5, and others under minimal scaffolding to expose raw coordination capabilities.
+
+**What I took:** Solo agents achieve ~50-63% success on paired coding tasks; 2-agent teams drop to ~25-29%. Performance degrades monotonically as you add agents — the opposite of human teams. Communication reduces merge conflicts but has approximately zero effect on task success. The failure taxonomy: 42% expectation failures (agent ignores what partner explicitly communicated), 32% commitment failures (agents don't follow through on promises), 26% communication failures. The biggest surprise: information is transmitted and received but not incorporated — this isn't a communication problem, it's a state-modeling problem. Agents can't maintain a model of what their partner is doing.
+
+Other findings: weaker coders coordinate better relatively (retain 68% of solo performance) while the strongest coders lose the most from coordination overhead. Prompt engineering targeting observed failure modes produced marginal improvements — these are fundamental capability gaps. Successful traces showed emergent role division and line-level resource allocation ("I will modify ONLY lines 68-84"), but these patterns are rare and unreliable.
+
+**Key insight:** The bottleneck for multi-agent coding has shifted from individual capability to coordination capability. Adding agent workers degrades results with current models.
+
+## When Single-Agent with Skills Replace Multi-Agent Systems — Xiaoxiao Li
+
+[arxiv.org/abs/2601.04748](https://arxiv.org/abs/2601.04748)
+
+Study on compiling multi-agent systems into single-agent-with-skills, with scaling experiments on skill library size and selection accuracy.
+
+**What I took:** Multi-agent systems can often be compiled into a single agent with a skill library — ~54% token reduction, ~50% latency reduction, equivalent accuracy on GSM8K, HumanEval, and HotpotQA. The compilation fails when tasks require true parallelism, agents maintain private state, or agents have adversarial objectives.
+
+The most important finding: skill selection accuracy doesn't degrade gradually — it hits a phase transition cliff at ~50-100 skills (GPT-4o class). Below threshold: >90% accuracy. Above 200: ~20%. Decay exponent >1 (super-linear). The driver is semantic confusability between skills, not raw count. Adding one near-duplicate skill at library size 20 caused 7-30% accuracy drop. Instruction complexity (30 vs. 300 tokens per skill) had zero effect. The bottleneck is choosing the right skill, not understanding what it does.
+
+Hierarchical routing (select domain first, then skill) recovers 37-40% absolute accuracy above the threshold. Both models tested (GPT-4o, GPT-4o-mini) showed the same pattern with slightly different capacity thresholds.
+
+**Key insight:** There is a measurable cliff in skill selection around 50-100 tools, driven by semantic similarity, not count. Hierarchical routing is the known mitigation.
+
+## τ³-Bench: Knowledge and Voice Agent Benchmarking — Sierra
+
+[sierra.ai/blog/bench-advancing-agent-benchmarking-to-knowledge-and-voice](https://sierra.ai/blog/bench-advancing-agent-benchmarking-to-knowledge-and-voice)
+
+Sierra's extension of the original τ-bench (Yao et al., 2024) adding knowledge retrieval and voice evaluation dimensions. Corporate blog post, not peer-reviewed, but the numbers are concrete and honestly reported — they make agents look bad.
+
+**What I took:** Two findings. First, knowledge-grounded task completion is much harder than retrieval. On τ-Knowledge (698 documents, 195K tokens, fintech customer service), GPT-5.2 with high reasoning achieved only ~25% task success. Even when the agent was handed the exact documents it needed — perfect retrieval — success only reached 40%. The bottleneck is "understanding it, drawing the correct conclusions, and executing the required actions," not finding the information. Some models reached similar accuracy but took nine times longer. This is the strongest data point I've seen against the assumption that RAG + a good model = solved problem.
+
+Second, voice agents collapse under realistic conditions. In clean environments, the best voice agents hit ~54% success (comparable to non-reasoning text models at 31-51%). Under realistic conditions — accents, noise, interruptions, compressed phone lines — voice agents drop to 26-38%, while text agents with reasoning stay at ~85%. Authentication is the cascade trigger: mishearing a name or email at the start poisons everything downstream. The gap isn't just ASR quality — agents can't reason during fluid conversation the way they can with extended thinking time in text.
+
+Also worth noting: Sierra's own benchmark shows agents at 25-40% on knowledge tasks, while their Ghostwriter product announcement claims you can upload SOPs and get production-ready agents. These claims are in direct tension.
+
+**Key insight:** Giving an agent the right documents is necessary but nowhere near sufficient. The retrieval-to-action gap — understanding documents, drawing conclusions, and executing correctly — is where most failures happen, not in retrieval itself.
+
 ## Claude-Mem
 
 [github.com/thedotmack/claude-mem](https://github.com/thedotmack/claude-mem)

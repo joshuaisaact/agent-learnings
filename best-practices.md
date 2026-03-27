@@ -8,6 +8,14 @@ The best architecture is the simplest one that meets your requirements. A single
 
 The progression is: single agent → single agent with skills → sequential workflow → parallel workflow → multi-agent. Most people should stop at step 1 or 2.
 
+The evidence for this keeps getting stronger. Stanford tested LLM agent teams across MMLU Pro, GPQA, HLE, MATH-500, and organizational psychology tasks and found that teams *systematically* fail to leverage their best member's expertise. The mechanism is "integrative compromise" — non-expert agents average expert and non-expert views instead of deferring. Even when teams are explicitly told which agent is the expert, performance barely improves. Larger teams make it worse: statistically significant degradation from 2 to 8 agents. The root cause is RLHF alignment training, which optimizes for agreeableness over epistemic deference. The agents are trained to be helpful and collaborative, which means they compromise when they should defer.
+
+CooperBench confirms this for coding specifically: solo agents achieve ~50-63% success on collaborative coding tasks, while 2-agent teams drop to ~25-29%. Communication between agents reduces merge conflicts but has approximately zero effect on task success — agents talk past each other. 42% of failures are "expectation failures" where an agent ignores what its partner explicitly communicated. The information was received; it just wasn't incorporated. Prompt engineering targeting these failure modes produced marginal improvements — these are fundamental capability gaps, not prompt-fixable.
+
+One wrinkle: the same integrative compromise that kills expert performance *protects* against adversarial agents. If you have untrusted participants in the mix, multi-agent consensus has value. But if all agents are trusted, a single expert agent outperforms a team.
+
+A separate study found that multi-agent systems can often be "compiled" into a single agent with a skill library — achieving ~54% token reduction and ~50% latency reduction with equivalent accuracy on GSM8K, HumanEval, and HotpotQA. The compilation fails when tasks require true parallelism, agents maintain private state, or agents have adversarial objectives. For sequential workflows, single-agent-with-skills is strictly better.
+
 ## Give agents bash
 
 Bash is the most powerful general-purpose tool you can give an agent. It lets the agent compose operations, chain steps, verify its work, and handle complex multi-step tasks without needing specialized tools or orchestration frameworks. Before building a custom tool, ask: could the agent just do this with a bash command?
@@ -21,6 +29,10 @@ Claude Code has ~20 tools and the bar to add a new one is high. Every tool you a
 If you need to expand capabilities without adding tools, use progressive disclosure — point the agent to files/folders it can discover and explore on demand, rather than dumping everything into the prompt.
 
 The failure mode isn't just decision fatigue — it's ambiguity. OpenAI's data agent team found that when they gave the agent its full tool set, overlapping functionality confused it. Consolidating and restricting tools produced "dramatically better results." If two tools can do similar things, the agent will pick wrong half the time.
+
+There's a hard number for this. Skill/tool selection accuracy doesn't degrade gradually as the library grows — it hits a phase transition cliff at ~50-100 skills (GPT-4o class models). Below that threshold: >90% selection accuracy. Above 200: ~20%. The decay is super-linear (exponent >1), not gradual. And the driver is semantic confusability between skills, not raw count — adding one near-duplicate skill at a library size of 20 caused a 7-30% accuracy drop, while adding semantically distinct skills had no effect. Instruction complexity (30 tokens vs. 300 tokens per skill definition) had zero measurable effect on selection accuracy. The bottleneck is choosing the right tool, not understanding what it does.
+
+The fix for large libraries is hierarchical routing: select a domain/category first, then select a specific skill within it. This recovers 37-40% absolute accuracy above the threshold by ensuring each decision stage operates within the reliable capacity regime. Claude Code's Tool Search mechanism and Codex's skill system both implement variants of this pattern.
 
 ## Context engineering > prompt engineering
 
@@ -174,6 +186,28 @@ This is the tightest possible feedback loop for code changes. Neither Claude Cod
 Agents get stuck in read loops — grepping, reading files, searching — without ever acting. GSD's "analysis paralysis guard" is the simplest fix: if the agent makes 5+ consecutive read/search/grep calls without any edit, write, or bash action, force it to stop and either act on what it's learned or explain why it's stuck. This is enforceable as a hook (count tool calls by category, inject a warning when the ratio skews) or as an iron law in the prompt.
 
 The broader pattern: instrument the tool call stream for degenerate sequences. Other examples — the agent editing and reverting the same file repeatedly (fix loop), the agent running the same test more than 3 times (hoping it passes), the agent reading its own previous output (self-referential loop). Each is a detectable pattern that a hook can interrupt.
+
+The inverse failure is equally detectable: verbose reasoning without tool use. UNDERWRITE found that incorrect agent traces had fewer steps but *higher* token counts — the agent talked itself into an answer instead of grounding it with tools. GPT-5-Nano generated 7k output tokens across 3 steps with zero tool calls and got it wrong. Claude Haiku used 400 tokens across 4 steps with 1 tool call and got it right. High output tokens + low tool call count is a measurable signal that the agent is confabulating rather than investigating. A hook that flags this pattern (e.g., >2k tokens generated without a single tool call) could interrupt before the agent commits to a wrong answer.
+
+## Optimize for tool error recovery, not avoidance
+
+Tool errors are normal. UNDERWRITE evaluated 13 frontier models on 300 insurance underwriting tasks and found that even the top 3 models made at least one tool error in 20-40% of conversations. The correlation between raw tool error rate and answer correctness was weak. What actually differentiated top performers was the *recovery rate* — how often the agent made a corrected call to the same tool after an error. Recovery rate had a moderate-to-strong positive correlation with correctness.
+
+This means agent builders should stop trying to prevent all tool errors (better descriptions, simpler schemas, guardrails on inputs) and instead ensure the agent can notice and retry. Concretely: return informative error messages that tell the agent what went wrong and how to fix it. Include metadata retrieval tools so the agent can look up correct usage after a failure. Don't terminate the session on the first tool error — let the agent self-correct. The best agents treat tool errors as a normal part of their reasoning loop, not as failures.
+
+## Pretrained knowledge is an active hazard in specialized domains
+
+Giving an agent tools doesn't mean it will use them. UNDERWRITE found that models hallucinate domain-specific answers from pretraining even when they have full tool access to the correct information. Smaller models are hit hardest: Claude Haiku scored near 100% on tasks where reference answers matched pretrained expectations but dropped to 66% when answers were "surprising" (divergent from what the model would expect). GPT-5-Mini and GPT-5-Nano hallucinated insurance products not in the guidelines 58-66% of the time in product recommendation tasks.
+
+The failure mode: the model is confident it already knows the answer, so it doesn't check. This is especially dangerous when working with proprietary business logic, company-specific rules, or any domain where the correct answer contradicts general knowledge. The model's pretraining becomes a liability — it "knows" things that are wrong for your specific context.
+
+Mitigations: force tool use before final answers in domains with proprietary knowledge. Build skills that require evidence from tools as a gate before any recommendation. Use anti-rationalization tables targeting the specific excuse "I already know this from my training." For evaluation, measure how accuracy changes as answers diverge from what the model would expect — if accuracy holds on "obvious" tasks but drops on surprising ones, the model is leaning on pretraining instead of tools.
+
+## Todo tools as attention anchoring
+
+A todo/task tool that makes the agent write down its plan and next steps after each action keeps it on track across long tool-use chains. The mechanism isn't state management — it's attention reinforcement. Writing "next I need to do X" places that intent late in the context window where it has maximum influence on the next turn. PostHog found this was the difference between agents getting lost after a few tool calls and agents sustaining coherent multi-step execution across dozens of steps. Claude Code's Task Tool and Open SWE's `write_todos` implement the same pattern. The tool barely needs to do anything — the value is in the act of writing, not the output.
+
+This is the within-session equivalent of the progress file pattern for cross-session work. Progress files anchor the agent at session start; todo tools anchor it at every step.
 
 ## Context pressure awareness for autonomous agents
 
