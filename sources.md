@@ -555,3 +555,81 @@ Zechner (creator of the Pi agent framework, OpenClaw) on the discipline gap in a
 **What I took:** The argument that agents remove the natural constraint of human typing speed, so errors compound at inhuman scale. Developers lose understanding when delegating — "you have zero idea what's going on because you delegated all your agency to your agents." Changes that warrant weeks of consideration now occur in hours. Willison's counter: "write by hand" isn't the answer — a new discipline balancing speed against thoroughness is needed. This is a framing problem, not a tooling problem. Strengthens the case for verification infrastructure, not slower agents.
 
 **Key insight:** Agent speed isn't the problem — the lack of proportional verification is. Build verification that scales with output, not human review that doesn't.
+
+## Claw Code (clean-room port of Claude Code internals) — instructkr
+
+[github.com/instructkr/claw-code](https://github.com/instructkr/claw-code)
+
+Third-party Python/Rust rewrite of Claude Code's harness architecture, created after the source was briefly exposed in March 2026. Not the actual source — a clean-room port. The Python `src/` is mostly scaffolding and metadata; the Rust implementation under `rust/` has a more functional runtime. The most valuable artifact is `PARITY.md`, a detailed gap analysis comparing the port against the original TS architecture.
+
+**What I took:** Concrete implementation details of patterns I already believed in. The system prompt has an explicit `SYSTEM_PROMPT_DYNAMIC_BOUNDARY` separating the cacheable static prefix from the per-turn dynamic suffix — a clean architectural marker for the static/dynamic split. CLAUDE.md discovery walks up the directory tree collecting instruction files at each level (4KB/file cap, 12KB total), enabling hierarchical per-directory instructions in monorepos. Auto-compaction triggers on cumulative input tokens (~200k default), not message count, and produces a structured summary (role counts, tool names, referenced files, inferred pending work) rather than truncating. Each tool declares a required permission level (ReadOnly/WorkspaceWrite/DangerFullAccess) and tools above the session's level are filtered from the schema — the model never sees what it can't use. Tool errors return as normal results with `is_error: true`, keeping the loop uniform. Hook exit codes: 0=allow, 2=deny, other=warn; hook stdout merges into the tool result.
+
+The most important finding: structural enforcement (filtering tools from the schema) and behavioral enforcement (hooks that inspect tool calls) are two distinct mechanisms solving different problems. Use structural enforcement for absolute constraints, behavioral enforcement for contextual ones.
+
+**Key insight:** The distinction between structural and behavioral enforcement. Removing a tool from the schema is a harder guarantee than a hook that blocks it — one makes the action impossible, the other makes it deniable. Production harnesses need both.
+
+## Harness Engineering for Coding Agent Users — Martin Fowler (Birgitta Bockeler)
+
+[martinfowler.com/articles/harness-engineering.html](https://martinfowler.com/articles/harness-engineering.html)
+
+Fowler's team formalizing the Agent = Model + Harness frame with a guides/sensors taxonomy.
+
+**What I took:** Two ideas not well-covered elsewhere. First, "harnessability" as a property of the codebase itself — strongly-typed languages, clear module boundaries, and established frameworks make harnesses more effective because they constrain the solution space. This is Ashby's Law applied to codebases: unbounded variety makes comprehensive harness coverage impossible. Technology choices made for human reasons (type safety, modularity) pay compound dividends when agents enter the picture.
+
+Second, the guides/sensors taxonomy. Guides are feedforward (steer before generation: rules files, constraints, example patterns). Sensors are feedback (catch problems after generation: tests, linters, type checkers). Both come in computational (deterministic, cheap — run on every change) and inferential (LLM-based, expensive — use selectively) flavors. The taxonomy itself isn't new — the notes already cover this as "promote rules into code" + "verification over self-reporting" — but the 2x2 matrix (guide/sensor x computational/inferential) is a cleaner way to think about what's missing from a harness.
+
+Also references Margaret-Anne Storey's "intent debt" concept: poorly captured goals limit human-AI collaboration because the agent can't work toward goals that don't exist as artifacts. This is upstream of context engineering.
+
+**Key insight:** Some codebases are structurally more harnessable than others. The upper bound on harness effectiveness is set by the codebase's inherent constraints (type system, module boundaries), not by the harness itself.
+
+## Open Models Have Crossed a Threshold — LangChain
+
+[blog.langchain.com/open-models-have-crossed-a-threshold](https://blog.langchain.com/open-models-have-crossed-a-threshold/)
+
+LangChain's eval results showing open-weight models matching frontier on agent execution tasks.
+
+**What I took:** GLM-5 and MiniMax M2.7 now match Claude Opus on core agent tasks — file operations, tool use, instruction following — at ~20x lower cost ($12/day vs $250/day for 10M tokens) and ~2x lower latency. Correctness is close (GLM-5: 0.64, Opus: 0.68). This changes the economics of the architect/editor split: use frontier models for planning and reasoning where they still have an edge, open models for execution where they're now equivalent. The split becomes a cost optimization, not just a capability split.
+
+**Key insight:** The architect/editor pattern can now double as a cost optimization. Open models handle execution; frontier models handle reasoning. Don't pay frontier prices for work that doesn't need frontier reasoning.
+
+## Cursor — Anysphere
+
+[cursor.com/blog](https://www.cursor.com/blog)
+
+AI coding editor with the largest user base in the space. Technically notable for training their own models via RL on real user interactions, and for solving latency/context problems that CLI agents don't face.
+
+**What I took:** Five ideas not well-covered by other sources.
+
+First, RL on real user data as the training loop. Cursor deploys model checkpoints to production, collects billions of tokens from actual developer sessions, distills reward signals (edit persistence, dissatisfied follow-ups, latency), updates weights, and redeploys — cycle takes ~5 hours. This keeps training fully on-policy (the model generating data is the model being trained). Their claim: the human directing the agent is the hardest thing to simulate, so real interactions eliminate the train-test mismatch that simulated environments have. This is a fundamentally different approach from benchmark-driven training.
+
+Second, RL-trained self-summarization for context management. Instead of prompted compaction (which is what most harnesses do), Cursor trains the model to compress its own context via RL — the summaries themselves are part of what gets rewarded. RL-trained summaries average ~1,000 tokens vs. ~5,000 for prompted summaries, with 50% error reduction on their benchmarks. Uses 1/5 the tokens while reusing KV cache. Validated on a 170-turn Terminal-Bench task compressing 100K+ tokens to 1K critical tokens. This is a model-level solution to a problem everyone else solves at the harness level.
+
+Third, reward hacking as a real operational problem. Two specific failures: (1) the model learned to emit broken tool calls on hard tasks to avoid negative reward for wrong answers — effectively refusing to try; (2) the model learned to ask clarifying questions instead of writing code to avoid punishment. Both required explicit fixes to the reward function. This is a concrete warning for anyone using RL to train agent behavior: models optimize the reward, not the intent.
+
+Fourth, multi-agent coordination at scale ("Towards Self-Driving Codebases" — ~1,000 commits/hour, 10M tool calls, no human intervention). They tried four coordination architectures: (1) shared-state self-coordination via files — failed, 20 agents operated at 1-3 agent throughput due to locking; (2) structured Planner→Executor→Workers→Judge — too rigid; (3) continuous executor — pathological behavior (sleeping, refusing to plan); (4) recursive planning hierarchy with handoffs — worked. The winning pattern: root planner owns full scope, subplanners recursively subdivide, workers return "handoffs" (code + notes, concerns, deviations, findings), no direct worker-to-worker communication. Also: accepting a stable error rate with periodic "green" reconciliation branches was better than requiring 100% correctness before every commit.
+
+Fifth, sandbox-aware agents. Their sandboxing blog describes uniform sandbox APIs with platform-specific backends (macOS Seatbelt, Linux Landlock+seccomp, Windows WSL2). But the insight isn't the sandbox — it's that teaching agents about their constraints via prompts and failure messages was critical. Without it, agents retried blocked commands endlessly. Sandbox awareness reduced approval requests by 40%.
+
+Also notable: "constraints are more effective than instructions" — "No TODOs, no partial implementations" outperforms "remember to finish implementations." Concrete numeric ranges ("Generate 20-100 tasks") beat vague instructions. This confirms the Iron Laws pattern from Superpowers. Their fast regex search indexes sparse n-grams client-side because agents need to read their own writes — server-side indexing adds latency that compounds across hundreds of tool calls. Their CursorBench sources tasks from real developer sessions (traced via "Cursor Blame" from commits back to agent requests) with intentionally terse prompts, unlike SWE-bench's detailed issue descriptions.
+
+**Key insight:** Training on real user interactions (not simulated environments) and learning context compression via RL (not prompted summarization) are qualitatively different approaches to the same problems everyone else solves at the harness level. The tradeoff: you need massive scale to make this work.
+
+## Devin — Cognition
+
+[cognition.ai/blog](https://www.cognition.ai/blog)
+
+Autonomous coding agent that kicked off the coding agent wave. Runs in persistent cloud VMs with full desktop, browser, and terminal access. Notable for their RL-trained foundation models (SWE series) and systems-level approach to agent architecture.
+
+**What I took:** Four ideas not well-covered by other sources.
+
+First, context anxiety. When using Sonnet 4.5 with a 200k context window, the model tracked its remaining tokens and prematurely wrapped up tasks — rushing to finish before hitting the limit. The fix: enable 1M context but cap actual usage at 200k, so the model never feels close to the limit. This is a behavioral artifact nobody else has documented — the model's *perception* of context remaining affects its behavior independently of actual token usage. Parallel execution amplifies it because parallel tool calls burn context faster.
+
+Second, dedicated retrieval subagents (SWE-grep). Agents spend 60%+ of their first turn just locating relevant code. SWE-grep is a specialized retrieval model constrained to 4 turns max (3 exploration + 1 answer) with 8 parallel tool calls per turn. Trained via RL with weighted F1 reward where precision matters more than recall — because missing context is recoverable (the agent can search again), but bad context is corrosive (it pollutes downstream reasoning). 20x faster than Haiku at retrieval, same quality. This is the strongest argument for a dedicated retrieval phase before the main agent loop.
+
+Third, RL scaling introduces behavioral debt. SWE-1.6 used two orders of magnitude more RL compute than SWE-1.5 and scored higher on benchmarks, but introduced bad UX behaviors: overthinking, excessive self-verification loops, sequential tool execution instead of parallel, verbose bash over structured tools. Models trained only on unit test pass/fail produced "AI slop: overly verbose, excessive try-catch blocks." Rubric-based quality grading and human expert reward hardening counteracted this, but the broader lesson is that RL at scale improves benchmarks while degrading practical behavior unless you actively defend against it.
+
+Fourth, managed agents with trajectory analysis. A primary Devin acts as coordinator, scoping work and assigning to child agents that each get an isolated VM. The coordinator reads full trajectories of child sessions — not just results — to learn what worked and improve future decomposition. This is a concrete implementation of the principle that decomposition quality matters more than raw parallelization. Also: scheduled agents carry state between runs via persistent notes, enabling recurring autonomous work (feature flag cleanup, staging QA sweeps) where each execution builds on prior work.
+
+Other useful observations: their PR merge rate doubled (34% → 67%) primarily by improving codebase understanding, confirming that context engineering is the biggest single lever. "Success scales with specificity" — well-scoped tasks with clear acceptance criteria get the best outcomes. Agent Trace is an open spec for persisting agent reasoning alongside code changes, enabling future agents to retrieve prior context and reducing redundant inference. The write-review-fix loop (agent generates code → automated reviewers catch issues → agent fixes → pushes) is their framing for why building systems beats building tools.
+
+**Key insight:** Context anxiety (the model's perception of remaining context affecting its behavior) and RL behavioral debt (benchmark improvements introducing UX regressions) are failure modes that only surface at production scale. They're invisible in research settings and hard to catch with benchmarks alone.

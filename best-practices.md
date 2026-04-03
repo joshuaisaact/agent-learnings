@@ -42,7 +42,10 @@ The most important thing you can do for an agent is give it the right context at
 - **Stable prompts, dynamic context via files** — keep the system prompt identical across sessions. Dynamic context (what to work on, what happened before) should be discovered by the agent reading files, not injected into the prompt. This also helps with prompt caching.
 - **Gotchas are the highest-signal content** — if you maintain any kind of instructions file, the most valuable section is the gotchas. Things the agent will get wrong without explicit guidance.
 - **Map, not manual** — keep instruction files short (~100 lines) and use them as a table of contents pointing to deeper sources of truth. OpenAI tried one big AGENTS.md and it failed: context is scarce so a giant file crowds out the actual task, too much guidance becomes non-guidance, monolithic files rot instantly and agents can't tell what's still true, and a single blob is hard to verify mechanically for freshness or coverage. A structured docs/ directory with indexed, cross-linked artifacts works better.
+- **Intent debt kills before context debt does** — context engineering assumes the goals are captured somewhere and just need to be surfaced. But often they aren't. "Intent debt" (Margaret-Anne Storey's term) is when goals, rationale, and constraints were never written down — they live in Slack threads, meetings, or people's heads. The agent can't work toward goals that don't exist as artifacts. This is upstream of context engineering: before optimizing what context the agent sees, make sure the intent is captured at all.
+- **Precision over recall in context retrieval** — missing context is recoverable (the agent can search again); bad context is corrosive (it pollutes downstream reasoning). Cognition's SWE-grep trains with weighted F1 where precision matters more than recall. This flips the intuition that more context is safer — it's not, because irrelevant context actively degrades the agent's reasoning about the relevant parts.
 - **Context is a system, not a prompt** — OpenAI's data agent uses six layers of context: schema metadata → code analysis of pipelines → curated expert descriptions → institutional knowledge (mined from Slack, Docs, Notion) → learning memory from prior conversations → live query fallback. Each layer adds signal. But more context is not always better — curated, accurate, smaller context outperformed large noisy context. The investment is in curation, not volume.
+- **Hierarchical instruction files** — Claude Code discovers instruction files by walking up the directory tree from the working directory, collecting `CLAUDE.md` (and variants like `.local.md`) at each level, capped at 4KB per file and 12KB total. This means a monorepo can have org-level instructions at the root, team-level instructions in subdirectories, and project-level instructions deeper still — they layer additively. This is a better pattern than one giant instructions file: each level is small, scoped, and maintainable by the team that owns that directory.
 
 ## Repo maps: structural context without token cost
 
@@ -82,6 +85,8 @@ In Aider's implementation (`aider/coders/architect_coder.py`), the Architect pro
 
 This is distinct from the evaluator-optimizer pattern. Evaluator-optimizer iterates on quality (generate, evaluate, regenerate). Architect/editor splits by capability (reason, then edit). They can be combined — architect/editor for the initial pass, then evaluator-optimizer for refinement — but they solve different problems.
 
+The capability split is increasingly also a cost split. Open models (GLM-5, MiniMax M2.7) now match frontier models on core execution tasks — file operations, tool use, instruction following — at ~20x lower cost and ~2x lower latency (LangChain benchmarks, April 2026). This means the architect/editor pattern can double as a cost optimization: use a frontier model for planning and reasoning, an open model for execution. The split isn't just about what each model is good at — it's about not paying frontier prices for work that doesn't need frontier reasoning.
+
 ## Plan/Act mode: separate exploration from modification
 
 Cline and OpenAI's Codex CLI both implement a "plan mode" where the agent can read and explore but cannot write. The agent investigates the codebase, builds understanding, and formulates a plan — all before being given write access.
@@ -111,6 +116,10 @@ The pattern is: wrap the agentic loop with deterministic guarantees at the bound
 This is related to "promote rules into code" but more specific: it's about where in the agent loop architecture you insert deterministic logic, and the distinction between checks the agent runs (which it might skip) vs. checks the harness runs (which it can't skip).
 
 Claude Code's hook system (`PreToolUse`, `PostToolUse`, `Stop`, `SubagentStop`, etc.) implements the same pattern. Hooks fire on specific events in the agent lifecycle and can block, modify, or augment the agent's behavior. The hook runs in the harness process, not in the agent's context, so the agent can't circumvent it.
+
+There are two distinct enforcement mechanisms here, and they solve different problems. **Structural enforcement** removes capabilities from the schema — the model never sees tools it shouldn't use. Claude Code's permission model does this: each tool declares a required permission level (ReadOnly, WorkspaceWrite, DangerFullAccess), and tools above the current session's permission level are filtered from the tool list before it reaches the model. In read-only mode, write tools don't exist as far as the model is concerned. Zero chance of violation because there's nothing to violate. **Behavioral enforcement** runs code alongside tools the model can see — hooks that inspect, block, or modify tool calls in flight. Claude Code's hook exit codes formalize this: `0` = allow, `2` = deny, anything else = warn and continue. Hook stdout gets merged into the tool result, so a hook can inject context the model sees on the next turn.
+
+Use structural enforcement when the constraint is absolute (the agent should never write in read-only mode). Use behavioral enforcement when the constraint is contextual (this specific bash command looks dangerous, but bash in general is fine).
 
 ## Don't railroad the agent
 
@@ -153,6 +162,8 @@ For the Claude API, prompt caching works by prefix matching. This means:
 
 If you're building a loop that calls the API repeatedly, the prompt should be identical across calls. Dynamic context goes in the file system, not the prompt.
 
+Claude Code's system prompt has an explicit `SYSTEM_PROMPT_DYNAMIC_BOUNDARY` marker that separates the static prefix (persona, instructions, tool schemas) from the dynamic suffix (environment info, git status, CLAUDE.md contents). Everything before the boundary is identical across turns and sessions — maximizing cache hits. Everything after is rebuilt each turn. If you're building a harness, draw this line explicitly in your prompt structure rather than letting static and dynamic content intermingle.
+
 ## Optimize for agent legibility
 
 From the agent's point of view, anything it can't access in-context effectively doesn't exist. Slack discussions, design decisions in Google Docs, knowledge in people's heads — none of it is usable unless it's in the repo as a versioned, discoverable artifact.
@@ -160,6 +171,8 @@ From the agent's point of view, anything it can't access in-context effectively 
 This means pushing context into the repository over time. That Slack thread where the team aligned on an architectural pattern? If it's not discoverable by the agent, it's as unknown as it would be to a new hire joining three months later.
 
 This also shapes technology choices. Prefer "boring" technology: composable, API-stable, well-represented in the training data. Agents model these better. In some cases it's cheaper to have the agent reimplement a subset of functionality (with full test coverage and tight integration) than to work around opaque behavior from external libraries.
+
+There's a deeper structural version of this: some codebases are inherently more "harnessable" than others. Strongly-typed languages, clear module boundaries, and established frameworks give agents — and the harnesses around them — more to grip. This is Ashby's Law applied to codebases: constraining the solution space (e.g., defined service topologies, strict type systems, enforced dependency direction) makes it possible to build comprehensive harnesses. Unbounded variety makes full coverage impossible regardless of how good the harness is. The implication is that technology and architecture choices made for human reasons (type safety, modularity) pay compound dividends when agents enter the picture.
 
 ## Promote rules into code
 
@@ -194,6 +207,8 @@ The inverse failure is equally detectable: verbose reasoning without tool use. U
 Tool errors are normal. UNDERWRITE evaluated 13 frontier models on 300 insurance underwriting tasks and found that even the top 3 models made at least one tool error in 20-40% of conversations. The correlation between raw tool error rate and answer correctness was weak. What actually differentiated top performers was the *recovery rate* — how often the agent made a corrected call to the same tool after an error. Recovery rate had a moderate-to-strong positive correlation with correctness.
 
 This means agent builders should stop trying to prevent all tool errors (better descriptions, simpler schemas, guardrails on inputs) and instead ensure the agent can notice and retry. Concretely: return informative error messages that tell the agent what went wrong and how to fix it. Include metadata retrieval tools so the agent can look up correct usage after a failure. Don't terminate the session on the first tool error — let the agent self-correct. The best agents treat tool errors as a normal part of their reasoning loop, not as failures.
+
+Claude Code implements this structurally: tool execution errors are returned as tool results with `is_error: true` — structurally identical to successful results from the conversation loop's perspective. The loop doesn't branch on success vs. failure; it just feeds the result back and lets the model decide what to do next. This is cleaner than try/catch patterns that treat errors as exceptional control flow.
 
 ## Pretrained knowledge is an active hazard in specialized domains
 
@@ -238,6 +253,10 @@ Simon Willison's counter: "write by hand" isn't the answer. The new discipline i
 For long-running autonomous agents (multi-hour Codex runs, overnight Ralph loops), the agent itself should know when context is filling up. GSD implements this as a hook that monitors context usage and injects warnings at 35% and 25% remaining into the agent's `additionalContext`. The agent can then checkpoint its progress before compaction wipes working state.
 
 This matters less for interactive sessions (where compaction handles it) and more for unattended agents that need to preserve state across compaction boundaries. The agent can't checkpoint what it doesn't know it's about to lose.
+
+A subtler variant: context anxiety. Cognition found that Sonnet 4.5 tracked its remaining context and prematurely wrapped up tasks — rushing to finish before hitting the limit, even when there was plenty of room. The fix: enable a larger context window than you actually intend to use, so the model never feels close to the boundary. Parallel execution amplifies this because parallel tool calls burn context faster. The model's *perception* of remaining context affects behavior independently of actual token usage.
+
+On compaction itself: Claude Code triggers auto-compaction based on cumulative input token count (default ~200k), not message count. When it fires, it preserves the 4 most recent messages and replaces everything before them with a synthetic System message containing a structured summary — message counts by role, tool names used, inferred pending work (extracted from text patterns), and referenced file paths. This is smarter than simple truncation because it preserves the shape of the work so far. The agent knows what tools it used and what files it touched, even if the details are gone. The token-based trigger is also better than message-count-based: a conversation with 50 short messages and one with 5 massive tool outputs have very different context pressure, and the token count captures that.
 
 ## Planning artifacts are a prompt injection surface
 
