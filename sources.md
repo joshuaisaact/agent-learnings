@@ -699,3 +699,31 @@ Empirical study of 3,109 PRs comparing human-only vs. code review agent (CRA) re
 This is the empirical complement to Sashiko's approach. Sashiko works (53.6% bug detection with <20% false positives) because it uses multi-pass analysis with a consolidation stage that filters noise. Generic CRAs that do a single "review this PR" pass produce mostly low-signal feedback. The consolidation/adjudication step is what separates useful automated review from noise.
 
 **Key insight:** Code review agents without human oversight and without structured multi-pass analysis generate mostly noise. The industry claim of 80% autonomous review is empirically false at 45%.
+
+## On the Impact of AGENTS.md Files — JAWs 2026
+
+[arxiv.org/abs/2601.20404](https://arxiv.org/abs/2601.20404)
+
+First empirical study isolating the effect of AGENTS.md files on agent efficiency. 124 PRs across 10 repos, Codex (gpt-5.2-codex), each task run twice in isolated Docker: once with AGENTS.md, once without. Published at Journal Ahead Workshop (JAWs), April 12-18, 2026.
+
+**What I took:** Hand-written AGENTS.md reduces median runtime by 28.6% and output tokens by 16.6%. The mechanism: without AGENTS.md, the agent spends turns exploring — reading directory structures, inferring build systems, guessing test commands. With a concise one, it skips straight to working.
+
+But LLM-generated AGENTS.md files *hurt* performance by 2-3% on average, reducing task success on SWE-bench Lite and AgentBench. They're redundant to existing docs (READMEs, contributing guides) and the duplication dilutes attention rather than reinforcing. Separately, bloated instruction files are actively harmful: a real-world case showed a 1,247-line CLAUDE.md causing 14 turns with 2 bugs; trimmed to 47 essential lines, the same task completed in 8 turns with zero bugs. The 70% context capacity threshold emerged as a practical guideline — pushing past it degrades output quality.
+
+This is the empirical validation of the "map, not manual" principle. Concise, hand-written, non-redundant instruction files help a lot. Long generated ones hurt. The ~100-line guideline turns out to be roughly right.
+
+**Key insight:** AGENTS.md works when concise and hand-written (28.6% faster). LLM-generated instruction files hurt performance. Don't duplicate what's already in your README.
+
+## Measuring AI Agent Autonomy in Practice — Anthropic
+
+[anthropic.com/research/measuring-agent-autonomy](https://www.anthropic.com/research/measuring-agent-autonomy)
+
+Anthropic's analysis of 998K API tool calls and Claude Code session data, examining how much autonomy users actually grant agents. Published ~April 1, 2026.
+
+**What I took:** Autonomy grows with trust, not capability. The 99.9th percentile turn duration nearly doubled in 3 months (under 25 → over 45 minutes), but the growth is smooth across model releases — not jumping with new launches. This means it's driven by users building trust and tackling more ambitious tasks, not by model improvements.
+
+The trust curve is counterintuitive: experienced users auto-approve more (20% → 40%+ by 750 sessions) but also interrupt more often. More autonomy and more oversight coexist. Software engineering is 49.7% of tool calls — agent autonomy is overwhelmingly an SWE phenomenon. Only 0.8% of actions are irreversible. 73% have human-in-loop. 80% have at least one safeguard.
+
+The "deployment overhang" concept: models can handle more autonomy than users grant. The bottleneck is trust infrastructure (verification, observability, rollback), not model capability. This quantifies the 60/20 gap from the Agentic Coding Trends Report — AI used in 60% of workflows, fully delegated in 0-20%.
+
+**Key insight:** Autonomy is a trust problem, not a capability problem. Experienced users both auto-approve more and interrupt more — the two aren't opposites.
