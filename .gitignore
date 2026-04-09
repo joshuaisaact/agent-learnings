@@ -3,6 +3,8 @@ scripts/.seen_source_ids.json
 
 # Fetched feed data
 sources_feed.json
+fetch-output.json
+fetch-stderr.log
 
 # Dependencies
 node_modules/
