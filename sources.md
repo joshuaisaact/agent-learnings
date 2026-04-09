@@ -322,6 +322,8 @@ Push-based event injection into running Claude Code sessions via MCP-compatible 
 
 **What I took:** A new interaction primitive: external systems push events (webhooks, CI failures, chat messages) into a session that already has accumulated project context. Sessions become long-lived event processors, not request-response interactions. Implementation reuses MCP — a channel is just an MCP server with one extra capability flag, so existing tooling and security infrastructure applies. Remote permission relay distributes tool-approval prompts to Telegram/Discord; both local terminal and remote channel stay live, first response wins. This is a different trust topology than local-only approval gates.
 
+Also notable: Claude Code Dispatch, released alongside Channels in Q1 2026, adds a complementary primitive — programmatic async task queueing. Where Channels maintain persistent bidirectional connections for ongoing communication, Dispatch is fire-and-forget: submit a task, the agent handles it asynchronously, you collect results later. Dispatch is particularly useful in multi-agent architectures where an orchestrator delegates subtasks without maintaining session connections. Together, Channels (persistent, bidirectional, event-driven) and Dispatch (async, one-shot, queue-oriented) cover the two main patterns for programmatic agent invocation.
+
 **Key insight:** Push-based events into stateful sessions is a different primitive from polling, hooks, or fresh sessions per task. The session's accumulated context is the value — you don't want to rebuild it for every webhook.
 
 ## Cook — R.J. Corwin
@@ -633,3 +635,67 @@ Fourth, managed agents with trajectory analysis. A primary Devin acts as coordin
 Other useful observations: their PR merge rate doubled (34% → 67%) primarily by improving codebase understanding, confirming that context engineering is the biggest single lever. "Success scales with specificity" — well-scoped tasks with clear acceptance criteria get the best outcomes. Agent Trace is an open spec for persisting agent reasoning alongside code changes, enabling future agents to retrieve prior context and reducing redundant inference. The write-review-fix loop (agent generates code → automated reviewers catch issues → agent fixes → pushes) is their framing for why building systems beats building tools.
 
 **Key insight:** Context anxiety (the model's perception of remaining context affecting its behavior) and RL behavioral debt (benchmark improvements introducing UX regressions) are failure modes that only surface at production scale. They're invisible in research settings and hard to catch with benchmarks alone.
+
+## Effective Context Engineering for AI Agents — Anthropic
+
+[anthropic.com/engineering/effective-context-engineering-for-ai-agents](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+
+Anthropic's engineering guide on context engineering as an iterative curation discipline for agent systems.
+
+**What I took:** The framing that context engineering is five operations: select, compress, order, isolate, and format. Not "write a good prompt" — it's an ongoing curation process that runs on every turn. The most actionable finding: agent workloads have approximately 100:1 prefill-to-decode ratios, making KV cache hit rate the single most important production metric. Never dynamically add or remove tools mid-iteration — tool definitions sit near the front of context and any change invalidates the cache for everything after. Use state machines to constrain action selection instead of modifying tool schemas. This is the technical justification for why Claude Code implements plan mode as a tool call rather than a schema swap.
+
+Also reinforces "precision over recall" for context retrieval — irrelevant context actively degrades reasoning about relevant context. The instinct to give the agent "everything it might need" is reliably wrong. Five Sigma Insurance found that curated targeted context reached 95%+ accuracy while the full document corpus performed far worse.
+
+**Key insight:** Optimize for KV-cache hit rate above all else. The 100:1 prefill-to-decode ratio means cache efficiency dominates both cost and latency in production agent systems.
+
+## Harness Design for Long-Running Application Development — Anthropic
+
+[anthropic.com/engineering/harness-design-long-running-apps](https://www.anthropic.com/engineering/harness-design-long-running-apps)
+
+Anthropic's engineering guide on building multi-hour autonomous development workflows, specifically for frontend/full-stack applications with subjective quality requirements.
+
+**What I took:** The planner-generator-evaluator harness — three structurally separated agents. The planner expands a brief 1-4 sentence prompt into a comprehensive product spec. The generator implements features iteratively (one feature per context window, structured artifact handoff between sessions). The evaluator — the key innovation — is a separate agent that never saw the generation process, calibrated with few-shot examples and weighted scoring criteria.
+
+Why structural separation matters: when you ask an LLM to generate and then evaluate its own output, it confidently praises mediocre work (sunk-cost bias). A separate evaluator judges on merits alone. The evaluator requires few-shot calibration — without it, evaluators default to either uniform praise or arbitrary nitpicking. Calibration examples show the evaluator what "good," "okay," and "bad" look like with scores, aligning its judgment to human preferences.
+
+Runs 5-15 iterations per task, sometimes taking up to 4 hours. The generator-evaluator loop continues until the evaluator scores above a threshold. This is the evaluator-optimizer pattern extended with a planning phase and applied to subjective quality assessment.
+
+**Key insight:** Structural separation between generator and evaluator prevents sunk-cost bias. Few-shot calibration is mandatory — uncalibrated LLM evaluators are useless for subjective quality.
+
+## 2026 Agentic Coding Trends Report — Anthropic
+
+[resources.anthropic.com/2026-agentic-coding-trends-report](https://resources.anthropic.com/2026-agentic-coding-trends-report)
+
+Anthropic's industry report on how coding agents are reshaping software development. Eight trends across foundation, capability, and impact categories.
+
+**What I took:** The hard numbers on adoption: developers use AI in ~60% of their workflows but fully delegate only 0-20% of tasks. Claude Code authors ~4% of all GitHub commits. 57% of organizations deploy multi-step agent workflows. Task horizons are expanding from minutes to days/weeks, with agents maintaining coherent state across dozens of work sessions.
+
+Rakuten tested Claude Code on implementing an activation vector extraction method in vLLM — 7 hours of autonomous work, 99.9% numerical accuracy on a 12.5M-line codebase. This is the strongest published evidence for long-running autonomous agent capability on real production code.
+
+The delegation gap (60% usage, 0-20% full delegation) matches what I've seen — engineers develop intuitions about what to delegate over time. Easily verifiable and low-stakes tasks get delegated first. Conceptually difficult or design-dependent work stays human. The report expects this gap to narrow as trust mechanisms (better verification, better observability) mature.
+
+**Key insight:** The 60/20 gap — AI used in 60% of workflows but fully delegated in only 0-20% — quantifies the trust deficit. The lever is verification infrastructure, not model capability.
+
+## Agent Contributions in the Wild — Winkler et al.
+
+[arxiv.org/abs/2604.00917](https://arxiv.org/abs/2604.00917)
+
+Empirical study of ~110,000 open-source PRs across five coding agents (Codex, Claude Code, Copilot, Jules, Devin), examining merge rates, file types, developer interaction, and longitudinal code survival.
+
+**What I took:** Agent-generated code has higher churn rates over time — more rework and modification in subsequent commits compared to human-authored code. Not all agents are equal: Claude Code and Codex PRs merge at higher rates than human PRs, while Copilot and Devin merge at lower rates. But even merged agent code gets modified more downstream. This is the first large-scale longitudinal evidence that agent code carries a maintenance cost premium.
+
+The implication: merge rate alone is a misleading quality proxy. Code that merges easily but churns heavily is shipping maintenance debt. Teams should track code survival rate (how long agent-written code persists unchanged) alongside merge rate. This argues for stronger pre-merge verification — not to block agents, but to catch the quality issues that manifest as churn later.
+
+**Key insight:** Agent code merges faster but churns more. Merge rate is necessary but insufficient as a quality metric — track code survival rate to measure real quality.
+
+## Code Review Agents: From Industry Claims to Empirical Reality — MSR 2026
+
+[arxiv.org/abs/2604.03196](https://arxiv.org/abs/2604.03196)
+
+Empirical study of 3,109 PRs comparing human-only vs. code review agent (CRA) reviews. Published at MSR 2026 Mining Challenge.
+
+**What I took:** Industry claims that CRAs can handle 80% of PRs without human involvement don't hold up. CRA-only PRs achieve 45% merge rate vs. 68% for human-reviewed PRs — a 23-percentage-point gap. 60% of closed CRA-only PRs fall in the 0-30% signal range, meaning most automated review feedback is noise. 12 of 13 CRAs studied had average signal ratios below 60%.
+
+This is the empirical complement to Sashiko's approach. Sashiko works (53.6% bug detection with <20% false positives) because it uses multi-pass analysis with a consolidation stage that filters noise. Generic CRAs that do a single "review this PR" pass produce mostly low-signal feedback. The consolidation/adjudication step is what separates useful automated review from noise.
+
+**Key insight:** Code review agents without human oversight and without structured multi-pass analysis generate mostly noise. The industry claim of 80% autonomous review is empirically false at 45%.

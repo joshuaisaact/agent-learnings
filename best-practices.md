@@ -151,6 +151,12 @@ Commit after every meaningful unit of work. This gives you:
 - Descriptive history that future agent sessions can read
 - Proof of what actually happened vs what the agent claims
 
+## KV cache hit rate is the #1 production metric
+
+Agent workloads have approximately 100:1 prefill-to-decode ratios — the model re-reads the entire conversation on every turn before generating a few tokens of output. This makes KV cache efficiency the single most important production metric for agent systems. A cache miss means re-processing the full context from scratch on every turn.
+
+The practical implication beyond "don't change your prompt": never dynamically add or remove tools mid-iteration. Tool definitions sit near the front of the context, and any change invalidates the KV cache for all subsequent tokens. If you need to restrict available actions based on state (e.g., plan mode vs. act mode), use a state machine that constrains action selection within the same tool set rather than modifying the tool definitions themselves. Claude Code's plan mode (implemented as an `EnterPlanMode` tool rather than a schema swap) is an example of this — the tool set stays constant, preserving the cache.
+
 ## Prompt caching matters
 
 For the Claude API, prompt caching works by prefix matching. This means:
@@ -361,6 +367,14 @@ ATLAS demonstrates that wrapping a frozen 14B model in structured infrastructure
 The architecture is a three-phase pipeline: (1) PlanSearch generates diverse solution approaches with BudgetForcing controlling thinking tokens, (2) geometric self-embeddings score and rank candidates, (3) self-verified repair generates its own test cases and iteratively fixes failing solutions — rescuing 85.7% of failures. The repair phase contributes more than candidate selection in ablation studies.
 
 The tradeoff: 20 minutes per task. This is incompatible with interactive use but viable for batch processing, CI pipelines, and science workflows. The broader lesson: when latency is cheap, trading time for verification rigor is a valid strategy — especially when the verifier is strong enough that you can run candidates in parallel and take the first that passes.
+
+## Agent-generated code has higher churn
+
+An empirical study of ~110,000 open-source PRs across five coding agents (Codex, Claude Code, Copilot, Jules, Devin) found that agent-generated code has higher churn rates over time — more rework, more modifications in subsequent commits. Claude Code and Codex PRs merge at higher rates than human PRs, while Copilot and Devin merge at lower rates. But even merged agent code gets modified more frequently downstream.
+
+This is the empirical confirmation of Mario Zechner's argument about agent speed removing natural bottlenecks. The code ships faster, but the maintenance cost is higher. It argues for stronger verification gates before merge — not to slow agents down, but to catch the quality issues that show up as churn later. The Sashiko pattern (multi-pass review with consolidation) and the evaluator-optimizer pattern both address this, but most teams aren't using them yet.
+
+A separate study of 3,109 PRs with code review agents found that CRA-only PRs (no human reviewer) achieve a 45% merge rate vs. 68% for human-reviewed PRs, with 60% of CRA feedback falling in the 0-30% signal range. 12 of 13 code review agents studied had average signal ratios below 60%. Code review agents without human oversight generate mostly noise. The industry claim that CRAs can handle 80% of PRs without human involvement doesn't hold up empirically.
 
 ## Agent middleware as composable lifecycle hooks
 

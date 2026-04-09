@@ -74,6 +74,20 @@ The consolidation stage is a variant of the evaluator-optimizer pattern but appl
 
 Sashiko also loads per-subsystem prompts conditionally — a block layer patch gets block-specific review knowledge, a networking patch gets different context. Only the relevant subsystem's prompt is loaded, keeping context lean. This is progressive disclosure applied to domain expertise.
 
+## Planner-generator-evaluator harness
+
+**What:** Three structurally separated agents — a planner expands a brief user prompt into a comprehensive product spec, a generator implements features iteratively, and an evaluator (calibrated with few-shot examples) judges quality without having seen the generation process.
+
+**When:** Long-running autonomous development of subjective-quality work — frontend design, full-stack applications, anything where "is this good?" can't be answered by a test suite. Anthropic used this for multi-hour autonomous frontend builds (5-15 iterations, up to 4 hours per run).
+
+**Why it works:** The structural separation between generator and evaluator prevents sunk-cost bias. When you ask an LLM to generate code and then evaluate its own output, it confidently praises mediocre work. A separate evaluator that never saw the generation process judges the output on its merits. The planner prevents scope drift — it expands a 1-4 sentence prompt into a detailed spec upfront, so the generator has clear targets rather than improvising requirements as it goes.
+
+**Key details:** The evaluator requires few-shot calibration — showing it examples of different quality levels with scores — to align its judgment with human preferences. Without calibration, evaluators default to either "everything is great" or arbitrary nitpicking. Handoff between agents uses structured artifacts (JSON feature specs, commit-by-commit progress, a progress file), not conversation history. Each generator session operates within a single context window, then hands off artifacts to the next session.
+
+**How it differs from evaluator-optimizer:** Evaluator-optimizer iterates on quality between two agents (generate → evaluate → regenerate). The planner-generator-evaluator harness adds a planning phase and separates it from iteration. The planner runs once; the generator-evaluator loop runs many times. It also addresses a different failure mode: evaluator-optimizer assumes the spec is clear and iterates on execution quality. This pattern assumes the spec itself needs generation from a brief prompt.
+
+**Watch out for:** Cost — three agents means 3x the base token cost, multiplied by iteration count. Only justified when quality assessment genuinely requires an independent judge (subjective output) and the task is long enough that iterative refinement compounds value.
+
 ## Decompose by context boundaries, not problem type
 
 The intuitive way to split work across agents is by role: planner, implementer, tester, reviewer. This is usually wrong. Anthropic found that role-based splits cause agents to spend more tokens coordinating than working — the "telephone game" failure mode where each handoff between sequential agents degrades information fidelity.
