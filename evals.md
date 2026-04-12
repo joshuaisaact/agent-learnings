@@ -30,7 +30,7 @@ Three tiers of grading, in order of preference:
 
 1. **Code-based graders**: Use wherever possible. Unit test pass/fail, regex matching, JSON schema validation, exact string match. SWE-bench uses only this — tests pass or they don't. No ambiguity.
 
-2. **LLM-as-judge**: For subjective or complex evaluations where code can't express the criteria. Three sub-patterns: score without reference (rubric only), score with reference (gold-standard comparison), pairwise comparison (judge picks better of two outputs). Treat the judge as a classifier — measure its precision and recall against human labels, not just its "accuracy."
+2. **LLM-as-judge**: For subjective or complex evaluations where code can't express the criteria. Three sub-patterns: score without reference (rubric only), score with reference (gold-standard comparison), pairwise comparison (judge picks better of two outputs). Treat the judge as a classifier — measure its precision and recall against human labels, not just its "accuracy." Watch for two well-documented failure modes: **position bias** (judges favor the first or last option in pairwise comparisons — mitigate by randomizing order and averaging) and **self-preference bias** (models rate their own outputs higher — use a different model family as judge than the one that generated the output).
 
 3. **Human graders**: For calibration and edge cases. Use humans to validate that your automated graders agree with expert judgment, then rely on automation. Humans don't scale; they're for building trust in the automated pipeline.
 
