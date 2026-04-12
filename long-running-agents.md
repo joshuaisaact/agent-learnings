@@ -106,6 +106,14 @@ When compaction itself hits context limits (the conversation is too large even f
 
 The key design principle: compaction is not an afterthought. It's a core loop primitive that fires automatically based on token budgets. If you're building a harness for long-running tasks, design compaction into the agent loop from the start, not as error handling for "context window exceeded."
 
+## Session log as external context object
+
+Anthropic's managed agents takes the progress file concept further: instead of the agent summarizing what happened, an append-only event log stores raw events outside the context window. The agent retrieves events selectively via `getEvents()` — picking up from the last read position, rewinding to see the lead-up to a specific moment, or rereading context before a particular action.
+
+The difference from a progress file: no summarization loss. The agent replays what actually happened rather than reading its own summary of what happened. A transformation layer in the harness handles context engineering — organizing, filtering, and optimizing retrieved events for prompt cache efficiency before they reach the model.
+
+This separates two concerns that progress files conflate: durable storage (the event log, append-only, never lossy) and context management (the harness, which makes opinionated decisions about what the model sees). The harness can change its context strategy — different summarization, different ordering, different filtering — without touching the session log.
+
 ## Observer agent for automatic memory capture
 
 Claude-Mem (`github.com/thedotmack/claude-mem`) runs a second Claude instance as a "note-taker" — all tools disabled, it can only receive and respond to text. Every tool call from the primary session (file reads, edits, bash commands) is forwarded to the observer via the PostToolUse hook. The observer compresses raw tool I/O into structured records: what was investigated, what was learned, what was completed, what's next. These records go into SQLite with FTS5 search, and are injected back into future sessions via SessionStart.

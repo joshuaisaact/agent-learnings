@@ -121,6 +121,16 @@ There are two distinct enforcement mechanisms here, and they solve different pro
 
 Use structural enforcement when the constraint is absolute (the agent should never write in read-only mode). Use behavioral enforcement when the constraint is contextual (this specific bash command looks dangerous, but bash in general is fine).
 
+## Decouple brain, hands, and session
+
+Anthropic's managed agents architecture identifies three components that should be independently replaceable: the brain (model + harness loop), the hands (execution environments — containers, sandboxes, phones), and the session (append-only event log of everything that happened).
+
+The failure mode of coupling them: when session, harness, and sandbox all live in one container, you've created a "pet" — a hand-tended system you nurse back to health when it fails. A container crash loses the session. A harness bug, a packet drop, and a container crash all look identical from the outside. Debugging is impossible because you can't tell where the failure occurred.
+
+Decoupling turns pets into cattle. Container fails? The harness catches a tool-call error and tells Claude, who provisions a fresh one. Harness crashes? A new stateless harness calls `getSession(id)` and resumes from the last event. Nothing needs to survive in-process — the session log is durable storage external to both.
+
+The key interface: every execution target implements `execute(name, input) → string` — the harness sends a tool name and input, gets back a string result. It doesn't matter whether the target is a Docker container, a cloud VM, or a phone. This means adding new execution environments doesn't require changing the harness, and agents can hand off environments to each other with zero coordination overhead because they all speak the same contract.
+
 ## Don't railroad the agent
 
 Give the agent information and tools. Let it decide the approach. Over-prescriptive prompts ("first do X, then do Y, then do Z") lead to rigid behavior. Describe what good looks like, not how to get there.

@@ -82,6 +82,16 @@ When multi-agent is worth the 3-10x token cost and when it isn't.
 
 **Key insight:** Improved prompting on a single agent has frequently matched elaborate multi-agent systems that took months to build.
 
+## Scaling Managed Agents: Decoupling the Brain from the Hands — Anthropic
+
+[anthropic.com/engineering/managed-agents](https://www.anthropic.com/engineering/managed-agents)
+
+How Anthropic built their hosted agent infrastructure by decoupling reasoning, execution, and state.
+
+**What I took:** The "pets to cattle" lesson: coupling session + harness + sandbox in one container creates fragile systems where a single failure loses everything and all failure modes look identical. Decoupling into three independent components (brain, hands, session) means each can fail and recover independently — container crash becomes a tool-call error, harness crash recovers by replaying from the session log. The session log as external context object: an append-only event log with selective retrieval via `getEvents()`, separating durable storage from context management so the harness can change its context strategy without touching the log. The uniform execution interface `execute(name, input) → string` across all targets (containers, VMs, phones) lets agents hand off environments to each other. Performance win from decoupling: p50 TTFT dropped ~60%, p95 dropped >90% because sessions no longer pay upfront container setup costs.
+
+**Key insight:** Harnesses encode assumptions about model capabilities that become dead weight as models improve. Build stable interfaces around the model, not stable implementations.
+
 ## Shell + Skills + Compaction: Tips for Long-Running Agents — OpenAI
 
 [developers.openai.com/blog/skills-shell-tips](https://developers.openai.com/blog/skills-shell-tips)
