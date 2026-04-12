@@ -131,6 +131,16 @@ Decoupling turns pets into cattle. Container fails? The harness catches a tool-c
 
 The key interface: every execution target implements `execute(name, input) → string` — the harness sends a tool name and input, gets back a string result. It doesn't matter whether the target is a Docker container, a cloud VM, or a phone. This means adding new execution environments doesn't require changing the harness, and agents can hand off environments to each other with zero coordination overhead because they all speak the same contract.
 
+### Isolate the tool vs. isolate the agent
+
+There are two ways to sandbox an agent that can execute code, and they draw the isolation boundary in different places.
+
+**Isolate the tool (Anthropic's approach):** The agent loop runs outside the sandbox. Only code execution happens inside. The brain orchestrates from outside, credentials live in vaults accessed via proxies, and the sandbox never sees them. This is more flexible — one brain can coordinate multiple sandboxes, you can swap brains without touching sandboxes, and sessions that never need code execution don't pay container setup costs. The tradeoff: the brain is infrastructure you have to keep alive.
+
+**Isolate the agent (Browser Use's approach):** The entire agent runs inside the sandbox with zero credentials and no direct network access. Everything — LLM calls, file storage, billing — goes through a control plane proxy. The sandbox receives three env vars (session token, control plane URL, session ID) and has access to nothing else. The agent is maximally disposable: nothing worth stealing, nothing worth preserving. The tradeoff: every LLM call hops through the control plane (latency is noise compared to LLM response times) and you have three services to deploy instead of one.
+
+Both agree on the security principle: credentials must never be reachable from where untrusted code runs. The choice depends on whether your agents need to coordinate across multiple execution environments (isolate the tool) or whether each agent is a self-contained unit doing one thing (isolate the agent).
+
 ## Don't railroad the agent
 
 Give the agent information and tools. Let it decide the approach. Over-prescriptive prompts ("first do X, then do Y, then do Z") lead to rigid behavior. Describe what good looks like, not how to get there.

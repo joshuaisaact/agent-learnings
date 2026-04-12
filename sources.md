@@ -102,6 +102,16 @@ Practical patterns for skills, shell execution, and context management in Codex.
 
 **Key insight:** The description field is the most important part of a skill. It's a routing signal, not documentation.
 
+## How We Built Secure, Scalable Agent Sandbox Infrastructure — Browser Use
+
+[browser-use.com/blog/sandbox-infrastructure](https://www.browser-use.com/blog/sandbox-infrastructure)
+
+How Browser Use moved from isolating the tool to isolating the entire agent inside Unikraft micro-VMs.
+
+**What I took:** The two sandbox patterns clearly articulated: isolate the tool (sandbox code execution, keep agent on your backend) vs. isolate the agent (entire agent in sandbox, control plane proxy for everything). Browser Use chose Pattern 2 — the sandbox has three env vars and zero credentials, every external call goes through a stateless FastAPI control plane that validates session tokens and proxies with real credentials. LLM conversation history lives in the control plane's database, not the sandbox — the sandbox sends only new messages, the control plane reconstructs full context. File sync via presigned URLs so the sandbox never holds AWS credentials. Same container image runs as Unikraft micro-VM in production and Docker in development/evals. Hardening: bytecode-only execution (compile Python to .pyc, delete source), privilege drop via setuid after boot, environment stripping after reading tokens into memory.
+
+**Key insight:** "Your agent should have nothing worth stealing and nothing worth preserving." The maximally disposable agent is also the maximally secure one.
+
 ## Inside OpenAI's In-House Data Agent — OpenAI
 
 [openai.com/index/inside-our-in-house-data-agent](https://openai.com/index/inside-our-in-house-data-agent/)
