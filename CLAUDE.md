@@ -14,6 +14,7 @@ A collection of opinionated notes on building AI agents. Not a code project — 
 - **long-running-agents.md** — Multi-session agent patterns (initializer/coder split, progress files, feature lists, get-bearings ritual)
 - **skills.md** — What makes agent skills effective (anti-rationalization, iron laws, trigger scoping, deterministic scripts, composable chains)
 - **lessons-from-ralph.md** — Lessons from 4 versions of an autonomous coding agent (v1-v4 post-mortem)
+- **evals.md** — How to evaluate agents: three-level evaluation, grading tiers, statistical rigor, framework landscape, anti-patterns
 - **sources.md** — Key sources with opinionated summaries of what was taken from each
 
 ## Editorial voice
