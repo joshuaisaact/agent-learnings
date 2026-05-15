@@ -163,6 +163,14 @@ There's a spectrum of verification strength:
 
 Mistral's Leanstral demonstrates the extreme end: the agent generates Lean 4 code with formal proofs, and Lean's type checker acts as a perfect, deterministic verifier — either the proof checks or it doesn't. This unlocks a powerful cost optimization: generate N candidate solutions in parallel and verify all of them, taking the first that passes. Leanstral pass@2 ($36) beats Claude Sonnet ($549) on Lean benchmarks because the verifier is sound — passing means correct, no ambiguity. You can't do this with normal tests because passing tests doesn't guarantee correctness. The stronger your verifier, the more you can exploit parallel speculative generation.
 
+## Verify maintenance, not just correctness
+
+Tests confirm the code does what it claims today. They don't confirm you can still understand it next quarter. [James Shore's argument](https://www.jamesshore.com/v2/blog/2026/you-need-ai-that-reduces-your-maintenance-costs): if an agent doubles output, it must also halve maintenance cost per unit of code — otherwise the productivity spike gets paid back with interest in long-term maintenance. The failure mode he names is teams approving PRs they haven't actually read.
+
+"The tests pass" is necessary but not sufficient. Code that ships in 5 minutes but takes 30 minutes to understand next time you touch it is a net loss across a year. Verification has to include comprehensibility checks: does this code look like the rest of the codebase, are the names load-bearing, is the control flow legible without a footnote. Mechanical signals exist (cyclomatic complexity, file length, AST shape against repo norms) but the harder problem is enforcing human review when speed makes skipping it feel cheap.
+
+This extends "Verification over self-reporting" along a second axis. Programmatic verification stops the agent from lying about correctness. Comprehensibility verification stops it from racking up debt the team has to pay later.
+
 ## Git as the safety net
 
 Commit after every meaningful unit of work. This gives you:
@@ -207,6 +215,12 @@ Enforce invariants, not implementations. Require that data is validated at bound
 Agents replicate patterns that already exist in the codebase — including bad ones. Without active cleanup, the codebase drifts. OpenAI spent 20% of their engineering time on manual "AI slop" cleanup before automating it.
 
 The fix: encode "golden principles" (opinionated, mechanical rules about how the codebase should look) directly in the repo, then run recurring background agents that scan for deviations, grade quality, and open targeted refactoring PRs. Technical debt is a high-interest loan — continuous small payments beat periodic painful bursts. Human taste is captured once, then enforced continuously on every line of code.
+
+## Configuration drift in instruction files
+
+CLAUDE.md, AGENTS.md, skills — all of them encode rules that made sense for the model you were using when you wrote them. New model releases change the calculus. Anthropic [recommends reviewing CLAUDE.md every 3–6 months](https://claude.com/blog/how-claude-code-works-in-large-codebases-best-practices-and-where-to-start) after major model releases because rules written to work around an older model's failure modes can actively constrain a newer one. A CLAUDE.md note that says "always re-read the file before editing because you forget what's there" is anti-help against a model that no longer forgets.
+
+The same dynamic applies to skills: an iron law written to defend against an older model's overconfidence may just add friction on the next generation. The signal that a rule has expired is rarely loud — the agent keeps following it, slightly worse than it would without it. Schedule the review; it won't be obvious from outputs alone.
 
 ## Wire in LSP for immediate feedback
 

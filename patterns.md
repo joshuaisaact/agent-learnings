@@ -62,6 +62,14 @@ When to use what. Based on Anthropic's whitepaper + my own experience.
 
 **Watch out for:** Token costs (2-4 cycles typical). Don't use when first-attempt quality is already sufficient.
 
+## Interrogatory LLM
+
+**What:** Instead of the human writing context for the agent, the agent interviews the human and produces the context document itself. One question at a time, explicitly — letting the model batch questions defeats the discipline. [Martin Fowler's framing](https://martinfowler.com/bliki/InterrogatoryLLM.html).
+
+**When:** The context that needs to exist is in someone's head and they find writing it harder than answering questions. Specification capture, expert review of a draft spec, eliciting tribal knowledge from a domain expert before they leave the team.
+
+**Watch out for:** Leading questions confirm what the model already assumed. Useful counter: have the interview produce a structured artifact (numbered facts, claims tagged with provenance) so review catches drift. Also: don't let the model generate the document and the questions in the same turn; separate "ask" and "synthesize" phases. The interrogatory direction works best when the human is the source of truth and the bottleneck is articulation, not analysis.
+
 ## Bug-taxonomy decomposition for review
 
 For code review agents, decompose by vulnerability class rather than by workflow step or role. Sashiko (Google/Linux Foundation's kernel code review agent) runs 7 sequential analysis passes, each focused on one concern domain: (1) architectural correctness, (2) commit-message alignment, (3) logic errors, (4) memory lifecycle, (5) concurrency, (6) security, (7) hardware-specific. Each pass is optimized for recall — intentionally over-reports. Then a dedicated 8th consolidation stage deduplicates findings across all passes and attempts to logically prove or disprove each one before output.

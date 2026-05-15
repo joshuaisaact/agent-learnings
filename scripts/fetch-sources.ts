@@ -547,7 +547,7 @@ async function fetchGitHubReleases(repos: RepoConfig[]): Promise<Entry[]> {
   const results = await Promise.allSettled(
     repos.map(async ({ repo }) => {
       console.error(`Checking releases: ${repo}...`);
-      const raw = await httpGet(`https://api.github.com/repos/${repo}/releases?per_page=5`, {
+      const raw = await httpGet(`https://api.github.com/repos/${repo}/releases?per_page=10`, {
         Accept: "application/vnd.github.v3+json",
       });
       if (!raw) return [];

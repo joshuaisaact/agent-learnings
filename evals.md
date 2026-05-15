@@ -114,6 +114,18 @@ Patterns that work for building eval systems that last:
 - **Declarative configs**: Define evals as YAML/JSON data, not code. Enables sharing, version control, and exact replication.
 - **Version everything**: Track which model version, prompt version, and dataset version produced each result. Without this, you can't reproduce or compare.
 
+## Inject failures to test failure handling
+
+Martin Fowler poses this as ["Chaos Monkey for AI"](https://martinfowler.com/fragments/2026-05-14.html): deliberately introduce hallucinated or corrupted outputs in your test harness to evaluate whether your system detects and recovers from them. Most agent evals measure happy-path correctness; very few measure whether the surrounding system catches the model being wrong.
+
+Failure injections to consider:
+- Plausible-but-false tool outputs (fake test results, fake file contents)
+- Confident wrong answers in retrieval (correct schema, wrong values)
+- Plausibly malformed structured outputs (valid JSON, wrong types)
+- Tools that succeed silently while doing nothing
+
+The system passes if downstream verification or human review catches the injected failure. The system fails if the agent integrates the false output into its next action without protest. This catches the failure mode James Shore warns about — code shipping because no human ever actually looked at it.
+
 ## Framework landscape
 
 Not exhaustive, but these are the ones worth knowing:

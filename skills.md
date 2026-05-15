@@ -4,6 +4,12 @@ What makes a skill actually work vs. being ignored or misapplied. Based on study
 
 The skill format varies by framework (SKILL.md with YAML frontmatter for Claude Code/Codex/OpenClaw, .mdc files for Cursor, .clinerules for Cline), but the patterns that make skills effective are framework-agnostic.
 
+## Skills vs CLAUDE.md
+
+Skills handle reusable expertise; CLAUDE.md handles project conventions. Anthropic flags this split as one teams routinely get wrong: domain knowledge ("here's how migrations work in our system") ends up in CLAUDE.md where it loads on every session whether the task touches migrations or not, while project conventions ("we use snake_case for SQL columns") end up scattered across skills.
+
+The split has a mechanical justification. CLAUDE.md is always loaded; skills are conditionally loaded. Anything universal to the project pays its context cost once and belongs in CLAUDE.md. Anything that only matters when working in a specific area should be a skill, scoped so it activates only there. Treating these as the same primitive is how teams end up with a 12KB always-loaded prompt that contains domain knowledge for code they'll touch twice a year.
+
 ## Anti-rationalization tables
 
 The single most effective technique for preventing known LLM failure modes. A table mapping specific excuses the model will generate to the correct behavior:
@@ -34,6 +40,18 @@ Absolute constraints stated as non-negotiable rules. Not guidelines, not recomme
 These work better than graduated guidance because LLMs are good at reasoning their way around soft constraints. "You should generally run tests before claiming completion" leaves room for "but in this case the change is trivial." "NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE" does not.
 
 Superpowers' verification-before-completion skill operationalizes this as a gate function: (1) identify the command that proves the claim, (2) RUN it fresh, (3) READ the full output, (4) VERIFY it confirms the claim, (5) ONLY THEN make the claim. Forbids "should," "probably," "seems to." Forbids expressing satisfaction before verification ("Great!", "Perfect!", "Done!"). Drawn from 24 documented failure cases where trust was broken.
+
+## Suppression rules so skills don't become spam
+
+Iron Laws defend against the model rationalizing its way out of the right behavior. Suppression rules defend against the *user* rationalizing their way around the skill — by ignoring it once it starts feeling like nagging.
+
+DrCatHicks' [learning-opportunities skill](https://github.com/DrCatHicks/learning-opportunities) (offers 10–15 minute reflection exercises after architectural changes) ships with two suppression conditions baked in:
+- Won't suggest if the user declined an exercise this session
+- Won't suggest after two completed exercises in a session
+
+The mechanism is structural, not polite. A skill that fires every time it could fire trains the user to dismiss it without reading. A skill with quotas stays meaningful because each invocation costs the skill its next opportunity. This is the user-side mirror of degrees-of-freedom calibration: the more the skill imposes on user attention, the more it should impose on itself.
+
+The general form: any skill that interrupts the user (suggests an exercise, requires a confirmation, asks a question) should declare its own ceiling — per-session, per-day, per-decline. Without one, the skill optimizes for its own activation rate at the user's expense.
 
 ## Trigger scoping
 
@@ -114,6 +132,12 @@ As your skill collection grows, cross-cutting patterns emerge — the same princ
 Everything Claude Code's "rules-distill" workflow: scan all installed skills, extract principles that appear in 2+ skills, propose them as rule candidates with explicit justification. An anti-abstraction safeguard prevents over-promotion — a pattern must be genuinely cross-cutting, not just similar-sounding across two niche skills.
 
 This is the skill equivalent of refactoring: when you see the same pattern repeated, extract it. But with an important constraint — only promote what's truly universal. A rule that says "validate inputs at boundaries" helps everywhere. A rule that says "use BM25 for search" is too specific. The test: would this rule improve an agent's behavior in a project that uses none of your current skills?
+
+## When not to write a skill
+
+The default reflex is to add a skill for every recurring pain point. Resist it. James Pritchard's [critique](https://martinfowler.com/fragments/2026-05-14.html), via Fowler's fragments: many agent failures are better fixed by architecture or code patterns than by markdown. If the agent keeps misusing an API, a wrapper that makes misuse impossible is stronger than a skill that says "don't misuse it." If the agent keeps writing similar files, a generator or template removes the work from the agent's hands entirely. Skills are the right tool when the failure is in judgment or sequencing — choosing the wrong approach, skipping a verification step, writing before planning. They are the wrong tool when the failure is structural and code can foreclose it.
+
+The cost of getting this wrong is real: skill libraries grow until they hit the phase-transition cliff around 50–100 skills where selection accuracy collapses. Every skill that should have been a code change competes for the same selection budget as the ones that genuinely require model judgment.
 
 ## What separates production skills from demos
 
