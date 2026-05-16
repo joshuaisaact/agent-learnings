@@ -84,6 +84,11 @@
       "name": "Cognition (Devin)",
       "feed_url": "https://www.cognition.ai/rss.xml",
       "html_url": "https://www.cognition.ai/blog"
+    },
+    {
+      "name": "DAIR.AI Newsletter (Elvis Saravia)",
+      "feed_url": "https://nlp.elvissaravia.com/feed",
+      "html_url": "https://nlp.elvissaravia.com/"
     }
   ],
   "hacker_news": {

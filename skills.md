@@ -139,6 +139,22 @@ The default reflex is to add a skill for every recurring pain point. Resist it. 
 
 The cost of getting this wrong is real: skill libraries grow until they hit the phase-transition cliff around 50–100 skills where selection accuracy collapses. Every skill that should have been a code change competes for the same selection budget as the ones that genuinely require model judgment.
 
+## Skills are untrusted code
+
+A skill is instruction code that runs in the model's reasoning context. The default trust model in current ecosystems — signed by a known author, loaded from a trusted registry — has the same weakness as package registries: trust derives from origin, not from inspection. Once a skill catalog grows past a handful of authors, "I trust the namespace" stops being defensible.
+
+Metere's [Skills as Verifiable Artifacts](https://arxiv.org/abs/2605.00424) proposes treating every skill as untrusted by default, with three components:
+
+1. **Trust schema** embedded in the skill manifest, declaring an explicit verification level (signed, audited, formally verified, etc.) rather than implying trust from provenance.
+2. **Capability gate** whose human-in-the-loop policy depends on verification status — verified skills can run irreversible operations without per-call review; unverified ones must gate on a human.
+3. **Biconditional correctness criterion** for validating the verification procedures themselves, so you can't trivially mark everything "verified."
+
+The approach is model-agnostic and requires no retraining — it's a runtime concern, sitting at the harness layer.
+
+The supply-chain framing matters because skill ecosystems are starting to resemble npm and PyPI. Superpowers, OpenClaw, the wider community catalogs — each is a registry where a malicious or hijacked skill has the same blast radius as any other prompt injection, but lands via a channel that looks sanctioned. The recent TanStack npm supply-chain attack is the template for what this looks like applied to skills.
+
+The actionable form, even without adopting the full framework: declare verification status as metadata on each skill, gate irreversible operations on that status, prefer skills with explicit provenance (auditable code paths, deterministic scripts you can read) over skills you accept on signature alone, and treat any skill that asks for write or execute permissions as code that needs the same review as a dependency you'd vendor.
+
 ## What separates production skills from demos
 
 After studying hundreds of skills across platforms, the dividing line is clear:
